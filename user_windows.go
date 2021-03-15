@@ -1,4 +1,4 @@
-// Package pq is a pure Go Postgres driver for the database/sql package.
+// Package pq is a pure Go openGauss driver for the database/sql package.
 package pq
 
 import (

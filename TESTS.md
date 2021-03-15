@@ -2,7 +2,7 @@
 
 ## Running Tests
 
-`go test` is used for testing. A running PostgreSQL
+`go test` is used for testing. A running openGauss
 server is required, with the ability to log in. The
 database to connect to test with is "pqgotest," on
 "localhost" but these can be overridden using [environment
@@ -20,14 +20,17 @@ A benchmark suite can be run as part of the tests:
 
 ## Example setup (Docker)
 
-Run a postgres container:
+Run a openGauss container:
 
 ```
-docker run --expose 5432:5432 postgres
+docker run --name openGauss_test \
+--privileged=true -d -e GS_PASSWORD=Test@123 \
+-p 5432:5432 \
+enmotech/opengauss:latest
 ```
 
 Run tests:
 
 ```
-PGHOST=localhost PGPORT=5432 PGUSER=postgres PGSSLMODE=disable PGDATABASE=postgres go test
+PGHOST=localhost PGPORT=5432 PGUSER=gaussdb PGPASSWORD=Test@123 PGSSLMODE=disable PGDATABASE=postgres go test
 ```
