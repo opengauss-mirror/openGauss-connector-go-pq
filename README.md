@@ -1,39 +1,68 @@
-# openGauss-connector-go-pq
+# pq - A pure Go openGauss driver for Go's database/sql package
 
-#### 介绍
-{**以下是 Gitee 平台说明，您可以替换此简介**
-Gitee 是 OSCHINA 推出的基于 Git 的代码托管平台（同时支持 SVN）。专为开发者提供稳定、高效、安全的云端软件开发协作平台
-无论是个人、团队、或是企业，都能够用 Gitee 实现代码托管、项目管理、协作开发。企业项目请看 [https://gitee.com/enterprises](https://gitee.com/enterprises)}
+fork from [github/lib/pq](https://github/lib/pq)
 
-#### 软件架构
-软件架构说明
+## Install
+
+	go get gitee.com/opengauss/openGauss-connector-go-pq
+
+## What's the difference of libpq for openGauss
+When using original libpq go driver to access openGauss, the following error will be reported.
+```
+ pq: Invalid username/password,login denied.
+```
+The reason is that openGauss default user connection password authentication method is sha256, which is a unique encryption method. Although openGauss configuration can be modified by the following methods to support native libpq connection.
+
+1. Set the openGauss initialization parameter password_encryption_type.
+```
+alter system set password_encryption_type=0;
+```
+2. Set pg_hba.conf to allow md5 password verification: host all test 0.0.0.0/0 md5
+3. Create a new user in database, then connect by this user.
+
+We still prefer to use a more secure encryption method like sha256, so the modified libpq can be directly compatible with sha256.
+
+## Features
+
+* Adapt openGauss SHA256 password authentication
+* SSL
+* Handles bad connections for `database/sql`
+* Scan `time.Time` correctly (i.e. `timestamp[tz]`, `time[tz]`, `date`)
+* Scan binary blobs correctly (i.e. `bytea`)
+* Package for `hstore` support
+* COPY FROM support
+* pq.ParseURL for converting urls to connection strings for sql.Open.
+* Many libpq compatible environment variables
+* Unix socket support
+* Notifications: `LISTEN`/`NOTIFY`
+* pgpass support
+* GSS (Kerberos) auth
 
 
-#### 安装教程
+## Example
+```
+import (
+	"database/sql"
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+	_ "gitee.com/opengauss/openGauss-connector-go-pq"
+)
 
-#### 使用说明
+func main() {
+	connStr := "host=127.0.0.1 port=5432 user=gaussdb password=test@1234 dbname=postgres sslmode=disable"
+	db, err := sql.Open("opengauss", connStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var date string
+	err = db.QueryRow("select current_date ").Scan(&date)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(date)
+}
+```
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+## Tests
 
-#### 参与贡献
+`go test` is used for testing.  See [TESTS.md](TESTS.md) for more details.
 
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
-
-
-#### 特技
-
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
