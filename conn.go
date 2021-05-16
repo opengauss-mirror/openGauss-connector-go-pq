@@ -840,7 +840,7 @@ func (cn *conn) Close() (err error) {
 	return cn.sendSimpleMessage('X')
 }
 
-// Implement the "Queryer" interface
+// Query Implement the "Queryer" interface
 func (cn *conn) Query(query string, args []driver.Value) (driver.Rows, error) {
 	return cn.query(query, args)
 }
@@ -878,7 +878,7 @@ func (cn *conn) query(query string, args []driver.Value) (_ *rows, err error) {
 	}, nil
 }
 
-// Implement the optional "Execer" interface for one-shot queries
+// Exec Implement the optional "Execer" interface for one-shot queries
 func (cn *conn) Exec(query string, args []driver.Value) (res driver.Result, err error) {
 	if cn.getBad() {
 		return nil, driver.ErrBadConn
@@ -1119,7 +1119,11 @@ func isDriverSetting(key string) bool {
 
 func (cn *conn) startup(o values) {
 	w := cn.writeBuf(0)
+	//
 	// w.int32(196608)
+	//
+	// PROTOCOL_VERSION_350
+	// PROTOCOL_VERSION_351 196659
 	w.int32(196659)
 	// Send the backend the name of the database we want to connect to, and the
 	// user we want to connect as.  Additionally, we send over any run-time
@@ -1179,7 +1183,8 @@ func (cn *conn) auth(r *readBuf, o values) {
 			errorf("unexpected authentication response: %q", t)
 		}
 	case 5:
-		s := string(r.next(4))
+		a := r.next(4)
+		s := string(a)
 		w := cn.writeBuf('p')
 		w.string("md5" + md5s(md5s(o["password"]+o["user"])+s))
 		cn.send(w)
@@ -1345,6 +1350,41 @@ func (cn *conn) auth(r *readBuf, o values) {
 			}
 		} else {
 			errorf("The  password-stored method is not supported ,must be plain , md5 or sha256.")
+		}
+
+	// AUTH_REQ_MD5_SHA256
+	case 11:
+		/*
+			LOGGER.trace("AUTH_REQ_MD5_SHA256" + " ID: " + connectInfo);
+			byte[] digest;
+			String random64code = pgStream.receiveString(64);
+			byte[] md5Salt = pgStream.receive(4);
+			digest = MD5Digest.MD5_SHA256encode(password, random64code, md5Salt);
+			pgStream.sendChar('p');
+			pgStream.sendInteger4(4 + digest.length + 1);
+			pgStream.send(digest);
+			pgStream.sendChar(0);
+			pgStream.flush();
+		*/
+		random64code := string(r.next(64))
+		md5Salt := r.next(4)
+		result := Md5Sha256encode(o["password"], random64code, md5Salt)
+		digest := []byte("md5")
+		digest = append(digest, result...)
+		w := cn.writeBuf('p')
+		w.int32(4 + len(digest) + 1)
+		w.bytes(digest)
+		w.byte(0)
+		cn.send(w)
+
+		t, r := cn.recv()
+
+		if t != 'R' {
+			errorf("unexpected password response: %q", t)
+		}
+
+		if r.int32() != 0 {
+			errorf("unexpected authentication response: %q", t)
 		}
 
 	default:
