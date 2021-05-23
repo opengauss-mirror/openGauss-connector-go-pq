@@ -32,5 +32,5 @@ enmotech/opengauss:latest
 Run tests:
 
 ```
-PGHOST=localhost PGPORT=5432 PGUSER=gaussdb PGPASSWORD=Test@123 PGSSLMODE=disable PGDATABASE=postgres go test
+PGHOST=localhost PGPORT=5434 PGUSER=gaussdb PGPASSWORD=mtkOP@123 PGSSLMODE=disable PGDATABASE=postgres go test
 ```
