@@ -4,22 +4,17 @@ import (
 	"bufio"
 	"context"
 	"crypto/md5"
-	"database/sql"
+	"crypto/tls"
 	"database/sql/driver"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"net"
-	"os"
-	"os/user"
-	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
-	"unicode"
 
 	"gitee.com/opengauss/openGauss-connector-go-pq/oid"
 )
@@ -36,25 +31,6 @@ var (
 	errNoRowsAffected  = errors.New("no RowsAffected available after the empty statement")
 	errNoLastInsertID  = errors.New("no LastInsertId available after the empty statement")
 )
-
-// Compile time validation that our types implement the expected interfaces
-var (
-	_ driver.Driver = Driver{}
-)
-
-// Driver is the Postgres database driver.
-type Driver struct{}
-
-// Open opens a new connection to the database. name is a connection string.
-// Most users should only use it through database/sql package from the standard
-// library.
-func (d Driver) Open(name string) (driver.Conn, error) {
-	return Open(name)
-}
-
-func init() {
-	sql.Register("opengauss", &Driver{})
-}
 
 type parameterStatus struct {
 	// server version in the same format as server_version_num, or 0 if
@@ -89,45 +65,20 @@ func (s transactionStatus) String() string {
 	panic("not reached")
 }
 
-// Dialer is the dialer interface. It can be used to obtain more control over
-// how pq creates network connections.
-type Dialer interface {
-	Dial(network, address string) (net.Conn, error)
-	DialTimeout(network, address string, timeout time.Duration) (net.Conn, error)
-}
-
-// DialerContext is the context-aware dialer interface.
-type DialerContext interface {
-	DialContext(ctx context.Context, network, address string) (net.Conn, error)
-}
-
-type defaultDialer struct {
-	d net.Dialer
-}
-
-func (d defaultDialer) Dial(network, address string) (net.Conn, error) {
-	return d.d.Dial(network, address)
-}
-func (d defaultDialer) DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	return d.DialContext(ctx, network, address)
-}
-func (d defaultDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	return d.d.DialContext(ctx, network, address)
-}
-
 type conn struct {
-	c         net.Conn
-	buf       *bufio.Reader
-	namei     int
-	scratch   [512]byte
-	txnStatus transactionStatus
-	txnFinish func()
+	c   net.Conn
+	buf *bufio.Reader
 
+	logger         Logger
+	logLevel       LogLevel
+	config         *Config
+	fallbackConfig *FallbackConfig
+	namei          int
+	scratch        [512]byte
+	txnStatus      transactionStatus
+	txnFinish      func()
 	// Save connection arguments to use during CancelRequest.
 	dialer Dialer
-	opts   values
 
 	// Cancellation key data for use with CancelRequest messages.
 	processID int
@@ -164,104 +115,41 @@ type conn struct {
 	gss GSS
 }
 
-// Handle driver-side settings in parsed connection string.
-func (cn *conn) handleDriverSettings(o values) (err error) {
-	boolSetting := func(key string, val *bool) error {
-		if value, ok := o[key]; ok {
-			if value == "yes" {
-				*val = true
-			} else if value == "no" {
-				*val = false
-			} else {
-				return fmt.Errorf("unrecognized value %q for %s", value, key)
-			}
-		}
-		return nil
+func (cn *conn) shouldLog(lvl LogLevel) bool {
+	return cn.logger != nil && cn.logLevel >= lvl
+}
+func (cn *conn) log(ctx context.Context, lvl LogLevel, msg string, data map[string]interface{}) {
+	if !cn.shouldLog(lvl) {
+		return
+	}
+	if data == nil {
+		data = map[string]interface{}{}
+	}
+	if cn.c != nil && cn.processID != 0 {
+		data["pid"] = cn.processID
 	}
 
-	err = boolSetting("disable_prepared_binary_result", &cn.disablePreparedBinaryResult)
-	if err != nil {
-		return err
-	}
-	return boolSetting("binary_parameters", &cn.binaryParameters)
+	cn.logger.Log(ctx, lvl, msg, data)
 }
 
-func (cn *conn) handlePgpass(o values) {
-	// if a password was supplied, do not process .pgpass
-	if _, ok := o["password"]; ok {
-		return
-	}
-	filename := os.Getenv("PGPASSFILE")
-	if filename == "" {
-		// XXX this code doesn't work on Windows where the default filename is
-		// XXX %APPDATA%\postgresql\pgpass.conf
-		// Prefer $HOME over user.Current due to glibc bug: golang.org/issue/13470
-		userHome := os.Getenv("HOME")
-		if userHome == "" {
-			user, err := user.Current()
-			if err != nil {
-				return
-			}
-			userHome = user.HomeDir
-		}
-		filename = filepath.Join(userHome, ".pgpass")
-	}
-	fileinfo, err := os.Stat(filename)
+func (cn *conn) startTLS(tlsConfig *tls.Config) (err error) {
+	err = binary.Write(cn.c, binary.BigEndian, []int32{8, 80877103})
 	if err != nil {
 		return
 	}
-	mode := fileinfo.Mode()
-	if mode&(0x77) != 0 {
-		// XXX should warn about incorrect .pgpass permissions as psql does
-		return
-	}
-	file, err := os.Open(filename)
-	if err != nil {
-		return
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(io.Reader(file))
-	hostname := o["host"]
-	ntw, _ := network(o)
-	port := o["port"]
-	db := o["dbname"]
-	username := o["user"]
-	// From: https://github.com/tg/pgpass/blob/master/reader.go
-	getFields := func(s string) []string {
-		fs := make([]string, 0, 5)
-		f := make([]rune, 0, len(s))
 
-		var esc bool
-		for _, c := range s {
-			switch {
-			case esc:
-				f = append(f, c)
-				esc = false
-			case c == '\\':
-				esc = true
-			case c == ':':
-				fs = append(fs, string(f))
-				f = f[:0]
-			default:
-				f = append(f, c)
-			}
-		}
-		return append(fs, string(f))
+	response := make([]byte, 1)
+	if _, err = io.ReadFull(cn.c, response); err != nil {
+		return
 	}
-	for scanner.Scan() {
-		line := scanner.Text()
-		if len(line) == 0 || line[0] == '#' {
-			continue
-		}
-		split := getFields(line)
-		if len(split) != 5 {
-			continue
-		}
-		if (split[0] == "*" || split[0] == hostname || (split[0] == "localhost" && (hostname == "" || ntw == "unix"))) && (split[1] == "*" || split[1] == port) && (split[2] == "*" || split[2] == db) && (split[3] == "*" || split[3] == username) {
-			o["password"] = split[4]
-			return
-		}
+
+	if response[0] != 'S' {
+		return ErrSSLNotSupported
 	}
+
+	cn.c = tls.Client(cn.c, tlsConfig)
+
+	return nil
 }
 
 func (cn *conn) writeBuf(b byte) *writeBuf {
@@ -272,242 +160,40 @@ func (cn *conn) writeBuf(b byte) *writeBuf {
 	}
 }
 
-// Open opens a new connection to the database. dsn is a connection string.
-// Most users should only use it through database/sql package from the standard
-// library.
-func Open(dsn string) (_ driver.Conn, err error) {
-	return DialOpen(defaultDialer{}, dsn)
-}
-
-// DialOpen opens a new connection to the database using a dialer.
-func DialOpen(d Dialer, dsn string) (_ driver.Conn, err error) {
-	c, err := NewConnector(dsn)
-	if err != nil {
-		return nil, err
-	}
-	c.dialer = d
-	return c.open(context.Background())
-}
-
-func (c *Connector) open(ctx context.Context) (cn *conn, err error) {
-	// Handle any panics during connection initialization.  Note that we
-	// specifically do *not* want to use errRecover(), as that would turn any
-	// connection errors into ErrBadConns, hiding the real error message from
-	// the user.
-	defer errRecoverNoErrBadConn(&err)
-
-	// Create a new values map (copy). This makes it so maps in different
-	// connections do not reference the same underlying data structure, so it
-	// is safe for multiple connections to concurrently write to their opts.
-	o := make(values)
-	for k, v := range c.opts {
-		o[k] = v
-	}
-
-	bad := &atomic.Value{}
-	bad.Store(false)
-	cn = &conn{
-		opts:   o,
-		dialer: c.dialer,
-		bad:    bad,
-	}
-	err = cn.handleDriverSettings(o)
-	if err != nil {
-		return nil, err
-	}
-	cn.handlePgpass(o)
-
-	cn.c, err = dial(ctx, c.dialer, o)
-	if err != nil {
-		return nil, err
-	}
-
-	err = cn.ssl(o)
-	if err != nil {
-		if cn.c != nil {
-			cn.c.Close()
-		}
-		return nil, err
-	}
-
-	// cn.startup panics on error. Make sure we don't leak cn.c.
-	panicking := true
-	defer func() {
-		if panicking {
-			cn.c.Close()
-		}
-	}()
-
-	cn.buf = bufio.NewReader(cn.c)
-	cn.startup(o)
-
-	// reset the deadline, in case one was set (see dial)
-	if timeout, ok := o["connect_timeout"]; ok && timeout != "0" {
-		err = cn.c.SetDeadline(time.Time{})
-	}
-	panicking = false
-	return cn, err
-}
-
-func dial(ctx context.Context, d Dialer, o values) (net.Conn, error) {
-	network, address := network(o)
-
-	// Zero or not specified means wait indefinitely.
-	if timeout, ok := o["connect_timeout"]; ok && timeout != "0" {
-		seconds, err := strconv.ParseInt(timeout, 10, 0)
-		if err != nil {
-			return nil, fmt.Errorf("invalid value for parameter connect_timeout: %s", err)
-		}
-		duration := time.Duration(seconds) * time.Second
-
-		// connect_timeout should apply to the entire connection establishment
-		// procedure, so we both use a timeout for the TCP connection
-		// establishment and set a deadline for doing the initial handshake.
-		// The deadline is then reset after startup() is done.
-		deadline := time.Now().Add(duration)
-		var conn net.Conn
-		if dctx, ok := d.(DialerContext); ok {
-			ctx, cancel := context.WithTimeout(ctx, duration)
-			defer cancel()
-			conn, err = dctx.DialContext(ctx, network, address)
-		} else {
-			conn, err = d.DialTimeout(network, address, duration)
-		}
-		if err != nil {
-			return nil, err
-		}
-		err = conn.SetDeadline(deadline)
-		return conn, err
-	}
-	if dctx, ok := d.(DialerContext); ok {
-		return dctx.DialContext(ctx, network, address)
-	}
-	return d.Dial(network, address)
-}
-
-func network(o values) (string, string) {
-	host := o["host"]
-
-	if strings.HasPrefix(host, "/") {
-		sockPath := path.Join(host, ".s.PGSQL."+o["port"])
-		return "unix", sockPath
-	}
-
-	return "tcp", net.JoinHostPort(host, o["port"])
-}
-
 type values map[string]string
 
-// scanner implements a tokenizer for libpq-style option strings.
-type scanner struct {
-	s []rune
-	i int
-}
-
-// newScanner returns a new scanner initialized with the option string s.
-func newScanner(s string) *scanner {
-	return &scanner{[]rune(s), 0}
-}
-
-// Next returns the next rune.
-// It returns 0, false if the end of the text has been reached.
-func (s *scanner) Next() (rune, bool) {
-	if s.i >= len(s.s) {
-		return 0, false
-	}
-	r := s.s[s.i]
-	s.i++
-	return r, true
-}
-
-// SkipSpaces returns the next non-whitespace rune.
-// It returns 0, false if the end of the text has been reached.
-func (s *scanner) SkipSpaces() (rune, bool) {
-	r, ok := s.Next()
-	for unicode.IsSpace(r) && ok {
-		r, ok = s.Next()
-	}
-	return r, ok
-}
-
-// parseOpts parses the options from name and adds them to the values.
 //
-// The parsing code is based on conninfo_parse from libpq's fe-connect.c
-func parseOpts(name string, o values) error {
-	s := newScanner(name)
+// // scanner implements a tokenizer for libpq-style option strings.
+// type scanner struct {
+// 	s []rune
+// 	i int
+// }
 
-	for {
-		var (
-			keyRunes, valRunes []rune
-			r                  rune
-			ok                 bool
-		)
-
-		if r, ok = s.SkipSpaces(); !ok {
-			break
-		}
-
-		// Scan the key
-		for !unicode.IsSpace(r) && r != '=' {
-			keyRunes = append(keyRunes, r)
-			if r, ok = s.Next(); !ok {
-				break
-			}
-		}
-
-		// Skip any whitespace if we're not at the = yet
-		if r != '=' {
-			r, ok = s.SkipSpaces()
-		}
-
-		// The current character should be =
-		if r != '=' || !ok {
-			return fmt.Errorf(`missing "=" after %q in connection info string"`, string(keyRunes))
-		}
-
-		// Skip any whitespace after the =
-		if r, ok = s.SkipSpaces(); !ok {
-			// If we reach the end here, the last value is just an empty string as per libpq.
-			o[string(keyRunes)] = ""
-			break
-		}
-
-		if r != '\'' {
-			for !unicode.IsSpace(r) {
-				if r == '\\' {
-					if r, ok = s.Next(); !ok {
-						return fmt.Errorf(`missing character after backslash`)
-					}
-				}
-				valRunes = append(valRunes, r)
-
-				if r, ok = s.Next(); !ok {
-					break
-				}
-			}
-		} else {
-		quote:
-			for {
-				if r, ok = s.Next(); !ok {
-					return fmt.Errorf(`unterminated quoted string literal in connection string`)
-				}
-				switch r {
-				case '\'':
-					break quote
-				case '\\':
-					r, _ = s.Next()
-					fallthrough
-				default:
-					valRunes = append(valRunes, r)
-				}
-			}
-		}
-
-		o[string(keyRunes)] = string(valRunes)
-	}
-
-	return nil
-}
+// // newScanner returns a new scanner initialized with the option string s.
+// func newScanner(s string) *scanner {
+// 	return &scanner{[]rune(s), 0}
+// }
+//
+// // Next returns the next rune.
+// // It returns 0, false if the end of the text has been reached.
+// func (s *scanner) Next() (rune, bool) {
+// 	if s.i >= len(s.s) {
+// 		return 0, false
+// 	}
+// 	r := s.s[s.i]
+// 	s.i++
+// 	return r, true
+// }
+//
+// // SkipSpaces returns the next non-whitespace rune.
+// // It returns 0, false if the end of the text has been reached.
+// func (s *scanner) SkipSpaces() (rune, bool) {
+// 	r, ok := s.Next()
+// 	for unicode.IsSpace(r) && ok {
+// 		r, ok = s.Next()
+// 	}
+// 	return r, ok
+// }
 
 func (cn *conn) isInTransaction() bool {
 	return cn.txnStatus == txnStatusIdleInTransaction ||
@@ -1064,66 +750,7 @@ func (cn *conn) recv1() (t byte, r *readBuf) {
 	return t, r
 }
 
-func (cn *conn) ssl(o values) error {
-	upgrade, err := ssl(o)
-	if err != nil {
-		return err
-	}
-
-	if upgrade == nil {
-		// Nothing to do
-		return nil
-	}
-
-	w := cn.writeBuf(0)
-	w.int32(80877103)
-	if err = cn.sendStartupPacket(w); err != nil {
-		return err
-	}
-
-	b := cn.scratch[:1]
-	_, err = io.ReadFull(cn.c, b)
-	if err != nil {
-		return err
-	}
-
-	if b[0] != 'S' {
-		return ErrSSLNotSupported
-	}
-
-	cn.c, err = upgrade(cn.c)
-	return err
-}
-
-// isDriverSetting returns true iff a setting is purely for configuring the
-// driver's options and should not be sent to the server in the connection
-// startup packet.
-func isDriverSetting(key string) bool {
-	switch key {
-	case "host", "port":
-		return true
-	case "password":
-		return true
-	case "sslmode", "sslcert", "sslkey", "sslrootcert", "sslinline":
-		return true
-	case "fallback_application_name":
-		return true
-	case "connect_timeout":
-		return true
-	case "disable_prepared_binary_result":
-		return true
-	case "binary_parameters":
-		return true
-	case "krbsrvname":
-		return true
-	case "krbspn":
-		return true
-	default:
-		return false
-	}
-}
-
-func (cn *conn) startup(o values) {
+func (cn *conn) startup() {
 	w := cn.writeBuf(0)
 	//
 	// w.int32(196608)
@@ -1135,19 +762,18 @@ func (cn *conn) startup(o values) {
 	// user we want to connect as.  Additionally, we send over any run-time
 	// parameters potentially included in the connection string.  If the server
 	// doesn't recognize any of them, it will reply with an error.
-	for k, v := range o {
-		if isDriverSetting(k) {
-			// skip options which can't be run-time parameters
-			continue
-		}
-		// The protocol requires us to supply the database name as "database"
-		// instead of "dbname".
-		if k == "dbname" {
-			k = "database"
-		}
+
+	for k, v := range cn.config.RuntimeParams {
 		w.string(k)
 		w.string(v)
 	}
+	if cn.config.Database != "" {
+		w.string("database")
+		w.string(cn.config.Database)
+	}
+	w.string("user")
+	w.string(cn.config.User)
+
 	w.string("")
 	if err := cn.sendStartupPacket(w); err != nil {
 		panic(err)
@@ -1161,7 +787,7 @@ func (cn *conn) startup(o values) {
 		case 'S':
 			cn.processParameterStatus(r)
 		case 'R':
-			cn.auth(r, o)
+			cn.auth(r)
 		case 'Z':
 			cn.processReadyForQuery(r)
 			return
@@ -1171,13 +797,13 @@ func (cn *conn) startup(o values) {
 	}
 }
 
-func (cn *conn) auth(r *readBuf, o values) {
+func (cn *conn) auth(r *readBuf) {
 	switch code := r.int32(); code {
 	case 0:
 		// OK
 	case 3:
 		w := cn.writeBuf('p')
-		w.string(o["password"])
+		w.string(cn.config.Password)
 		cn.send(w)
 
 		t, r := cn.recv()
@@ -1191,7 +817,7 @@ func (cn *conn) auth(r *readBuf, o values) {
 	case 5:
 		s := string(r.next(4))
 		w := cn.writeBuf('p')
-		w.string("md5" + md5s(md5s(o["password"]+o["user"])+s))
+		w.string("md5" + md5s(md5s(cn.config.Password+cn.config.User)+s))
 		cn.send(w)
 
 		t, r := cn.recv()
@@ -1213,17 +839,17 @@ func (cn *conn) auth(r *readBuf, o values) {
 
 		var token []byte
 
-		if spn, ok := o["krbspn"]; ok {
+		if spn, ok := cn.config.GssAPIParams["krbspn"]; ok {
 			// Use the supplied SPN if provided..
 			token, err = cli.GetInitTokenFromSpn(spn)
 		} else {
 			// Allow the kerberos service name to be overridden
 			service := "postgres"
-			if val, ok := o["krbsrvname"]; ok {
+			if val, ok := cn.config.GssAPIParams["krbsrvname"]; ok {
 				service = val
 			}
 
-			token, err = cli.GetInitToken(o["host"], service)
+			token, err = cli.GetInitToken(cn.fallbackConfig.Host, service)
 		}
 
 		if err != nil {
@@ -1236,7 +862,6 @@ func (cn *conn) auth(r *readBuf, o values) {
 
 		// Store for GSSAPI continue message
 		cn.gss = cli
-
 	case 8: // GSSAPI continue
 
 		if cn.gss == nil {
@@ -1305,17 +930,17 @@ func (cn *conn) auth(r *readBuf, o values) {
 	// 	}
 
 	case 10:
-		// 这里在openGuass为sha256加密办法，主要代码流程来自jdbc相关实现
+		// 这里在openGauss为sha256加密办法，主要代码流程来自jdbc相关实现
 		passwordStoredMethod := r.int32()
 		digest := ""
-		if len(o["password"]) == 0 {
+		if len(cn.config.Password) == 0 {
 			errorf("The server requested password-based authentication, but no password was provided.")
 		}
 		if passwordStoredMethod == 0 || passwordStoredMethod == 2 {
 			random64code := string(r.next(64))
 			token := string(r.next(8))
 			serverIteration := r.int32()
-			result := RFC5802Algorithm(o["password"], random64code, token, "", serverIteration)
+			result := RFC5802Algorithm(cn.config.Password, random64code, token, "", serverIteration)
 			if len(result) == 0 {
 				errorf("Invalid username/password,login denied.")
 			}
@@ -1339,7 +964,7 @@ func (cn *conn) auth(r *readBuf, o values) {
 			// return
 		} else if passwordStoredMethod == 1 {
 			s := string(r.next(4))
-			digest = "md5" + md5s(md5s(o["password"]+o["user"])+s)
+			digest = "md5" + md5s(md5s(cn.config.Password+cn.config.User)+s)
 			w := cn.writeBuf('p')
 			w.int16(4 + len(digest) + 1)
 			w.string(digest)
@@ -1373,7 +998,7 @@ func (cn *conn) auth(r *readBuf, o values) {
 		*/
 		random64code := string(r.next(64))
 		md5Salt := r.next(4)
-		result := Md5Sha256encode(o["password"], random64code, md5Salt)
+		result := Md5Sha256encode(cn.config.Password, random64code, md5Salt)
 		digest := []byte("md5")
 		digest = append(digest, result...)
 		w := cn.writeBuf('p')
@@ -1395,6 +1020,30 @@ func (cn *conn) auth(r *readBuf, o values) {
 	default:
 		errorf("unknown authentication response: %d", code)
 	}
+}
+
+func (cn *conn) isPrimary() (bool, error) {
+	sqlText := "select pg_is_in_recovery()"
+
+	cn.log(nil, LogLevelDebug, "Check server is primary ?", map[string]interface{}{"sql": sqlText,
+		"host": cn.config.Host, "port": cn.config.Port})
+	inReRows, err := cn.query(sqlText, nil)
+	if err != nil {
+		cn.log(nil, LogLevelDebug, "err:"+err.Error(), map[string]interface{}{})
+		return false, err
+	}
+	defer inReRows.Close()
+	var pgIsInRecovery bool
+	lastCols := []driver.Value{&pgIsInRecovery}
+	err = inReRows.Next(lastCols)
+	if err != nil {
+		cn.log(nil, LogLevelDebug, "err:"+err.Error(), map[string]interface{}{})
+		return false, err
+	}
+	isIsInRecovery := lastCols[0].(bool)
+	cn.log(nil, LogLevelDebug, "Check server is primary ?", map[string]interface{}{"pg_is_in_recovery": isIsInRecovery,
+		"host": cn.config.Host, "port": cn.config.Port})
+	return !isIsInRecovery, err
 }
 
 type format int
@@ -1567,131 +1216,6 @@ func (cn *conn) parseComplete(commandTag string) (driver.Result, string) {
 		errorf("could not parse commandTag: %s", err)
 	}
 	return driver.RowsAffected(n), commandTag
-}
-
-type rowsHeader struct {
-	colNames []string
-	colTyps  []fieldDesc
-	colFmts  []format
-}
-
-type rows struct {
-	cn     *conn
-	finish func()
-	rowsHeader
-	done   bool
-	rb     readBuf
-	result driver.Result
-	tag    string
-
-	next *rowsHeader
-}
-
-func (rs *rows) Close() error {
-	if finish := rs.finish; finish != nil {
-		defer finish()
-	}
-	// no need to look at cn.bad as Next() will
-	for {
-		err := rs.Next(nil)
-		switch err {
-		case nil:
-		case io.EOF:
-			// rs.Next can return io.EOF on both 'Z' (ready for query) and 'T' (row
-			// description, used with HasNextResultSet). We need to fetch messages until
-			// we hit a 'Z', which is done by waiting for done to be set.
-			if rs.done {
-				return nil
-			}
-		default:
-			return err
-		}
-	}
-}
-
-func (rs *rows) Columns() []string {
-	return rs.colNames
-}
-
-func (rs *rows) Result() driver.Result {
-	if rs.result == nil {
-		return emptyRows
-	}
-	return rs.result
-}
-
-func (rs *rows) Tag() string {
-	return rs.tag
-}
-
-func (rs *rows) Next(dest []driver.Value) (err error) {
-	if rs.done {
-		return io.EOF
-	}
-
-	conn := rs.cn
-	if conn.getBad() {
-		return driver.ErrBadConn
-	}
-	defer conn.errRecover(&err)
-
-	for {
-		t := conn.recv1Buf(&rs.rb)
-		switch t {
-		case 'E':
-			err = parseError(&rs.rb)
-		case 'C', 'I':
-			if t == 'C' {
-				rs.result, rs.tag = conn.parseComplete(rs.rb.string())
-			}
-			continue
-		case 'Z':
-			conn.processReadyForQuery(&rs.rb)
-			rs.done = true
-			if err != nil {
-				return err
-			}
-			return io.EOF
-		case 'D':
-			n := rs.rb.int16()
-			if err != nil {
-				conn.setBad()
-				errorf("unexpected DataRow after error %s", err)
-			}
-			if n < len(dest) {
-				dest = dest[:n]
-			}
-			for i := range dest {
-				l := rs.rb.int32()
-				if l == -1 {
-					dest[i] = nil
-					continue
-				}
-				dest[i] = decode(&conn.parameterStatus, rs.rb.next(l), rs.colTyps[i].OID, rs.colFmts[i])
-			}
-			return
-		case 'T':
-			next := parsePortalRowDescribe(&rs.rb)
-			rs.next = &next
-			return io.EOF
-		default:
-			errorf("unexpected message after execute: %q", t)
-		}
-	}
-}
-
-func (rs *rows) HasNextResultSet() bool {
-	hasNext := rs.next != nil && !rs.done
-	return hasNext
-}
-
-func (rs *rows) NextResultSet() error {
-	if rs.next == nil {
-		return io.EOF
-	}
-	rs.rowsHeader = *rs.next
-	rs.next = nil
-	return nil
 }
 
 // QuoteIdentifier quotes an "identifier" (e.g. a table or a column name) to be
@@ -2030,84 +1554,6 @@ func parsePortalRowDescribe(r *readBuf) rowsHeader {
 		colFmts:  colFmts,
 		colTyps:  colTyps,
 	}
-}
-
-// parseEnviron tries to mimic some of libpq's environment handling
-//
-// To ease testing, it does not directly reference os.Environ, but is
-// designed to accept its output.
-//
-// Environment-set connection information is intended to have a higher
-// precedence than a library default but lower than any explicitly
-// passed information (such as in the URL or connection string).
-func parseEnviron(env []string) (out map[string]string) {
-	out = make(map[string]string)
-
-	for _, v := range env {
-		parts := strings.SplitN(v, "=", 2)
-
-		accrue := func(keyname string) {
-			out[keyname] = parts[1]
-		}
-		unsupported := func() {
-			panic(fmt.Sprintf("setting %v not supported", parts[0]))
-		}
-
-		// The order of these is the same as is seen in the
-		// PostgreSQL 9.1 manual. Unsupported but well-defined
-		// keys cause a panic; these should be unset prior to
-		// execution. Options which pq expects to be set to a
-		// certain value are allowed, but must be set to that
-		// value if present (they can, of course, be absent).
-		switch parts[0] {
-		case "PGHOST":
-			accrue("host")
-		case "PGHOSTADDR":
-			unsupported()
-		case "PGPORT":
-			accrue("port")
-		case "PGDATABASE":
-			accrue("dbname")
-		case "PGUSER":
-			accrue("user")
-		case "PGPASSWORD":
-			accrue("password")
-		case "PGSERVICE", "PGSERVICEFILE", "PGREALM":
-			unsupported()
-		case "PGOPTIONS":
-			accrue("options")
-		case "PGAPPNAME":
-			accrue("application_name")
-		case "PGSSLMODE":
-			accrue("sslmode")
-		case "PGSSLCERT":
-			accrue("sslcert")
-		case "PGSSLKEY":
-			accrue("sslkey")
-		case "PGSSLROOTCERT":
-			accrue("sslrootcert")
-		case "PGREQUIRESSL", "PGSSLCRL":
-			unsupported()
-		case "PGREQUIREPEER":
-			unsupported()
-		case "PGKRBSRVNAME", "PGGSSLIB":
-			unsupported()
-		case "PGCONNECT_TIMEOUT":
-			accrue("connect_timeout")
-		case "PGCLIENTENCODING":
-			accrue("client_encoding")
-		case "PGDATESTYLE":
-			accrue("datestyle")
-		case "PGTZ":
-			accrue("timezone")
-		case "PGGEQO":
-			accrue("geqo")
-		case "PGSYSCONFDIR", "PGLOCALEDIR":
-			unsupported()
-		}
-	}
-
-	return out
 }
 
 // isUTF8 returns whether name is a fuzzy variation of the string "UTF-8".

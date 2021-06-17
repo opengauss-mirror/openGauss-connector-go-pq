@@ -1,13 +1,73 @@
 package pq
 
 import (
+	"bufio"
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"os"
+	"net"
 	"strings"
+	"time"
 )
+
+// Compile time validation that our types implement the expected interfaces
+var (
+	_ driver.Driver = Driver{}
+)
+
+// Driver is the Postgres database driver.
+type Driver struct{}
+
+func init() {
+	sql.Register("opengauss", &Driver{})
+	sql.Register("mogdb", &Driver{})
+}
+
+// Open opens a new connection to the database. name is a connection string.
+// Most users should only use it through database/sql package from the standard
+// library.
+func (d Driver) Open(name string) (driver.Conn, error) {
+	return Open(name)
+}
+
+// DialFunc is a function that can be used to connect to a PostgreSQL server.
+type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+
+// BuildFrontendFunc is a function that can be used to create Frontend implementation for connection.
+// type BuildFrontendFunc func(r io.Reader, w io.Writer) Frontend
+
+// LookupFunc is a function that can be used to lookup IPs addrs from host.
+type LookupFunc func(ctx context.Context, host string) (addrs []string, err error)
+
+// Dialer is the dialer interface. It can be used to obtain more control over
+// how pq creates network connections.
+type Dialer interface {
+	Dial(network, address string) (net.Conn, error)
+	DialTimeout(network, address string, timeout time.Duration) (net.Conn, error)
+}
+
+// DialerContext is the context-aware dialer interface.
+type DialerContext interface {
+	DialContext(ctx context.Context, network, address string) (net.Conn, error)
+}
+
+type defaultDialer struct {
+	d net.Dialer
+}
+
+func (d defaultDialer) Dial(network, address string) (net.Conn, error) {
+	return d.d.Dial(network, address)
+}
+func (d defaultDialer) DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return d.DialContext(ctx, network, address)
+}
+func (d defaultDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return d.d.DialContext(ctx, network, address)
+}
 
 // Connector represents a fixed configuration for the pq driver with a given
 // name. Connector satisfies the database/sql/driver Connector interface and
@@ -17,8 +77,8 @@ import (
 // See https://golang.org/pkg/database/sql/driver/#Connector.
 // See https://golang.org/pkg/database/sql/#OpenDB.
 type Connector struct {
-	opts   values
 	dialer Dialer
+	config *Config
 }
 
 // Connect returns a connection to the database using the fixed configuration
@@ -40,76 +100,195 @@ func (c *Connector) Driver() driver.Driver {
 // See https://golang.org/pkg/database/sql/driver/#Connector.
 // See https://golang.org/pkg/database/sql/#OpenDB.
 func NewConnector(dsn string) (*Connector, error) {
-	var err error
-	o := make(values)
-
-	// A number of defaults are applied here, in this order:
-	//
-	// * Very low precedence defaults applied in every situation
-	// * Environment variables
-	// * Explicitly passed connection information
-	o["host"] = "localhost"
-	o["port"] = "5432"
-	// N.B.: Extra float digits should be set to 3, but that breaks
-	// Postgres 8.4 and older, where the max is 2.
-	o["extra_float_digits"] = "2"
-	for k, v := range parseEnviron(os.Environ()) {
-		o[k] = v
-	}
-
-	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
-		dsn, err = ParseURL(dsn)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if err := parseOpts(dsn, o); err != nil {
+	config, err := ParseConfig(dsn)
+	if err != nil {
 		return nil, err
 	}
+	return &Connector{dialer: defaultDialer{}, config: config}, nil
+}
 
-	// Use the "fallback" application name if necessary
-	if fallback, ok := o["fallback_application_name"]; ok {
-		if _, ok := o["application_name"]; !ok {
-			o["application_name"] = fallback
+// Open opens a new connection to the database. dsn is a connection string.
+// Most users should only use it through database/sql package from the standard
+// library.
+func Open(dsn string) (_ driver.Conn, err error) {
+	return DialOpen(defaultDialer{}, dsn)
+}
+
+// DialOpen opens a new connection to the database using a dialer.
+func DialOpen(d Dialer, dsn string) (_ driver.Conn, err error) {
+	c, err := NewConnector(dsn)
+	if err != nil {
+		return nil, err
+	}
+	c.dialer = d
+	return c.open(context.Background())
+}
+
+func (c *Connector) open(ctx context.Context) (cn *conn, err error) {
+	return c.connectConfig(ctx, c.config)
+}
+
+func (c *Connector) connectConfig(ctx context.Context, config *Config) (cn *conn, err error) {
+	if !config.createdByParseConfig {
+		return nil, errors.New("config must be created by ParseConfig")
+	}
+	return c.connect(ctx, config)
+}
+
+func (c *Connector) connect(ctx context.Context, config *Config) (cn *conn, err error) {
+	// ConnectTimeout restricts the whole connection process.
+	defer errRecoverNoErrBadConn(&err)
+
+	if config.ConnectTimeout != 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, config.ConnectTimeout)
+		defer cancel()
+	}
+	// Simplify usage by treating primary config and fallbacks the same.
+	fallbackConfigs := []*FallbackConfig{
+		{
+			Host:      config.Host,
+			Port:      config.Port,
+			TLSConfig: config.TLSConfig,
+		},
+	}
+
+	fallbackConfigs = append(fallbackConfigs, config.Fallbacks...)
+
+	fallbackConfigs, err = expandWithIPs(ctx, config.LookupFunc, fallbackConfigs)
+	if err != nil {
+		return nil, &connectError{config: config, msg: "hostname resolving error", err: err}
+	}
+
+	if len(fallbackConfigs) == 0 {
+		return nil, &connectError{config: config, msg: "hostname resolving error",
+			err: errors.New("ip addr wasn't found")}
+	}
+	for _, fc := range fallbackConfigs {
+		cn, err = c.connectFallbackConfig(ctx, config, fc)
+		if err != nil {
+			if pgErr, ok := err.(*Error); ok {
+				err = &connectError{config: config, msg: "server error", err: pgErr}
+				ErrCodeInvalidPassword := "28P01"                   // worng password
+				ErrCodeInvalidAuthorizationSpecification := "28000" // db does not exist
+				if pgErr.Code.String() == ErrCodeInvalidPassword ||
+					pgErr.Code.String() == ErrCodeInvalidAuthorizationSpecification {
+					break
+				}
+			}
+			if config.shouldLog(LogLevelDebug) {
+				config.Logger.Log(nil, LogLevelDebug, err.Error(), map[string]interface{}{
+					"host": fc.Host, "port": fc.Port})
+			}
+
+			continue
+		}
+
+		if len(fallbackConfigs) > 1 {
+			primary, err := cn.isPrimary()
+			if err != nil {
+				if pgErr, ok := err.(*Error); ok {
+					err = &connectError{config: config, msg: "server error", err: pgErr}
+					ErrCodeInvalidPassword := "28P01"                   // worng password
+					ErrCodeInvalidAuthorizationSpecification := "28000" // db does not exist
+					if pgErr.Code.String() == ErrCodeInvalidPassword ||
+						pgErr.Code.String() == ErrCodeInvalidAuthorizationSpecification {
+						break
+					}
+				}
+				if config.shouldLog(LogLevelDebug) {
+					config.Logger.Log(nil, LogLevelDebug, "connect instance failed", map[string]interface{}{
+						"host": fc.Host, "port": fc.Port, "err": err.Error()})
+				}
+				continue
+			}
+			if primary {
+				if config.shouldLog(LogLevelDebug) {
+					config.Logger.Log(nil, LogLevelDebug, "find primary instance", map[string]interface{}{
+						"host": fc.Host, "port": fc.Port})
+				}
+				break
+			}
+		}
+
+	}
+
+	if err != nil {
+		return nil, err // no need to wrap in connectError because it will already be wrapped in all cases except PgError
+	}
+	if cn == nil {
+		return nil, fmt.Errorf("connect failed. please check connect string")
+	}
+
+	return cn, nil
+}
+
+func (c *Connector) connectFallbackConfig(ctx context.Context, config *Config, fallbackConfig *FallbackConfig) (cn *conn, err error) {
+	cn = &conn{
+		config:         config,
+		logLevel:       config.LogLevel,
+		logger:         config.Logger,
+		fallbackConfig: fallbackConfig,
+	}
+
+	cn.log(ctx, LogLevelInfo, "Dialing server", map[string]interface{}{"host": fallbackConfig.Host, "port": fallbackConfig.Port})
+	network, address := NetworkAddress(fallbackConfig.Host, fallbackConfig.Port)
+	cn.c, err = config.DialFunc(ctx, network, address)
+	if err != nil {
+		return nil, &connectError{config: config, msg: "dial error", err: err}
+	}
+	if fallbackConfig.TLSConfig != nil {
+		if err := cn.startTLS(fallbackConfig.TLSConfig); err != nil {
+			cn.c.Close()
+			return nil, &connectError{config: config, msg: "tls error", err: err}
 		}
 	}
-
-	// We can't work with any client_encoding other than UTF-8 currently.
-	// However, we have historically allowed the user to set it to UTF-8
-	// explicitly, and there's no reason to break such programs, so allow that.
-	// Note that the "options" setting could also set client_encoding, but
-	// parsing its value is not worth it.  Instead, we always explicitly send
-	// client_encoding as a separate run-time parameter, which should override
-	// anything set in options.
-	if enc, ok := o["client_encoding"]; ok && !isUTF8(enc) {
-		return nil, errors.New("client_encoding must be absent or 'UTF8'")
-	}
-	o["client_encoding"] = "UTF8"
-	// DateStyle needs a similar treatment.
-	if datestyle, ok := o["datestyle"]; ok {
-		if datestyle != "ISO, MDY" {
-			return nil, fmt.Errorf("setting datestyle must be absent or %v; got %v", "ISO, MDY", datestyle)
+	panicking := true
+	defer func() {
+		if panicking {
+			cn.c.Close()
 		}
-	} else {
-		o["datestyle"] = "ISO, MDY"
-	}
+	}()
 
-	// If a user is not provided by any other means, the last
-	// resort is to use the current operating system provided user
-	// name.
-	if _, ok := o["user"]; !ok {
-		u, err := userCurrent()
+	cn.buf = bufio.NewReader(cn.c)
+	cn.startup()
+
+	// reset the deadline, in case one was set (see dial)
+	if c.config.ConnectTimeout.Seconds() > 0 {
+		err = cn.c.SetDeadline(time.Time{})
+	}
+	panicking = false
+	return cn, err
+}
+
+func expandWithIPs(ctx context.Context, lookupFn LookupFunc, fallbacks []*FallbackConfig) ([]*FallbackConfig, error) {
+	var configs []*FallbackConfig
+
+	for _, fb := range fallbacks {
+		// skip resolve for unix sockets
+		if strings.HasPrefix(fb.Host, "/") {
+			configs = append(configs, &FallbackConfig{
+				Host:      fb.Host,
+				Port:      fb.Port,
+				TLSConfig: fb.TLSConfig,
+			})
+
+			continue
+		}
+
+		ips, err := lookupFn(ctx, fb.Host)
 		if err != nil {
 			return nil, err
 		}
-		o["user"] = u
+
+		for _, ip := range ips {
+			configs = append(configs, &FallbackConfig{
+				Host:      ip,
+				Port:      fb.Port,
+				TLSConfig: fb.TLSConfig,
+			})
+		}
 	}
 
-	// SSL is not necessary or supported over UNIX domain sockets
-	if network, _ := network(o); network == "unix" {
-		o["sslmode"] = "disable"
-	}
-
-	return &Connector{opts: o, dialer: defaultDialer{}}, nil
+	return configs, nil
 }

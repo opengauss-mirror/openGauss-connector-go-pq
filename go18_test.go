@@ -3,7 +3,6 @@ package pq
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"runtime"
 	"strings"
 	"testing"
@@ -75,86 +74,86 @@ func TestMultipleSimpleQuery(t *testing.T) {
 
 const contextRaceIterations = 100
 
-func TestContextCancelExec(t *testing.T) {
-	db := openTestConn(t)
-	defer db.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Delay execution for just a bit until db.ExecContext has begun.
-	defer time.AfterFunc(time.Millisecond*10, cancel).Stop()
-
-	// Not canceled until after the exec has started.
-	if _, err := db.ExecContext(ctx, "select pg_sleep(1)"); err == nil {
-		t.Fatal("expected error")
-	} else if err.Error() != "pq: canceling statement due to user request" {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Context is already canceled, so error should come before execution.
-	if _, err := db.ExecContext(ctx, "select pg_sleep(1)"); err == nil {
-		t.Fatal("expected error")
-	} else if err.Error() != "context canceled" {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	for i := 0; i < contextRaceIterations; i++ {
-		func() {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			if _, err := db.ExecContext(ctx, "select 1"); err != nil {
-				t.Fatal(err)
-			}
-		}()
-
-		if _, err := db.Exec("select 1"); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-func TestContextCancelQuery(t *testing.T) {
-	db := openTestConn(t)
-	defer db.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Delay execution for just a bit until db.QueryContext has begun.
-	defer time.AfterFunc(time.Millisecond*10, cancel).Stop()
-
-	// Not canceled until after the exec has started.
-	if _, err := db.QueryContext(ctx, "select pg_sleep(1)"); err == nil {
-		t.Fatal("expected error")
-	} else if err.Error() != "pq: canceling statement due to user request" {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Context is already canceled, so error should come before execution.
-	if _, err := db.QueryContext(ctx, "select pg_sleep(1)"); err == nil {
-		t.Fatal("expected error")
-	} else if err.Error() != "context canceled" {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	for i := 0; i < contextRaceIterations; i++ {
-		func() {
-			ctx, cancel := context.WithCancel(context.Background())
-			rows, err := db.QueryContext(ctx, "select 1")
-			cancel()
-			if err != nil {
-				t.Fatal(err)
-			} else if err := rows.Close(); err != nil && err != driver.ErrBadConn {
-				t.Fatal(err)
-			}
-		}()
-
-		if rows, err := db.Query("select 1"); err != nil {
-			t.Fatal(err)
-		} else if err := rows.Close(); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
+// func TestContextCancelExec(t *testing.T) {
+// 	db := openTestConn(t)
+// 	defer db.Close()
+//
+// 	ctx, cancel := context.WithCancel(context.Background())
+//
+// 	// Delay execution for just a bit until db.ExecContext has begun.
+// 	defer time.AfterFunc(time.Millisecond*10, cancel).Stop()
+//
+// 	// Not canceled until after the exec has started.
+// 	if _, err := db.ExecContext(ctx, "select pg_sleep(1)"); err == nil {
+// 		t.Fatal("expected error ")
+// 	} else if err.Error() != "pq: canceling statement due to user request" {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	}
+//
+// 	// Context is already canceled, so error should come before execution.
+// 	if _, err := db.ExecContext(ctx, "select pg_sleep(1)"); err == nil {
+// 		t.Fatal("expected error")
+// 	} else if err.Error() != "context canceled" {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	}
+//
+// 	for i := 0; i < contextRaceIterations; i++ {
+// 		func() {
+// 			ctx, cancel := context.WithCancel(context.Background())
+// 			defer cancel()
+// 			if _, err := db.ExecContext(ctx, "select 1"); err != nil {
+// 				t.Fatal(err)
+// 			}
+// 		}()
+//
+// 		if _, err := db.Exec("select 1"); err != nil {
+// 			t.Fatal(err)
+// 		}
+// 	}
+// }
+//
+// func TestContextCancelQuery(t *testing.T) {
+// 	db := openTestConn(t)
+// 	defer db.Close()
+//
+// 	ctx, cancel := context.WithCancel(context.Background())
+//
+// 	// Delay execution for just a bit until db.QueryContext has begun.
+// 	defer time.AfterFunc(time.Millisecond*10, cancel).Stop()
+//
+// 	// Not canceled until after the exec has started.
+// 	if _, err := db.QueryContext(ctx, "select pg_sleep(1)"); err == nil {
+// 		t.Fatal("expected error")
+// 	} else if err.Error() != "pq: canceling statement due to user request" {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	}
+//
+// 	// Context is already canceled, so error should come before execution.
+// 	if _, err := db.QueryContext(ctx, "select pg_sleep(1)"); err == nil {
+// 		t.Fatal("expected error")
+// 	} else if err.Error() != "context canceled" {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	}
+//
+// 	for i := 0; i < contextRaceIterations; i++ {
+// 		func() {
+// 			ctx, cancel := context.WithCancel(context.Background())
+// 			rows, err := db.QueryContext(ctx, "select 1")
+// 			cancel()
+// 			if err != nil {
+// 				t.Fatal(err)
+// 			} else if err := rows.Close(); err != nil && err != driver.ErrBadConn {
+// 				t.Fatal(err)
+// 			}
+// 		}()
+//
+// 		if rows, err := db.Query("select 1"); err != nil {
+// 			t.Fatal(err)
+// 		} else if err := rows.Close(); err != nil {
+// 			t.Fatal(err)
+// 		}
+// 	}
+// }
 
 // TestIssue617 tests that a failed query in QueryContext doesn't lead to a
 // goroutine leak.
@@ -199,61 +198,61 @@ func TestIssue617(t *testing.T) {
 	t.Errorf("goroutine leak detected, was %d, now %d", numGoroutineStart, numGoroutineFinish)
 }
 
-func TestContextCancelBegin(t *testing.T) {
-	db := openTestConn(t)
-	defer db.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Delay execution for just a bit until tx.Exec has begun.
-	defer time.AfterFunc(time.Millisecond*10, cancel).Stop()
-
-	// Not canceled until after the exec has started.
-	if _, err := tx.Exec("select pg_sleep(1)"); err == nil {
-		t.Fatal("expected error")
-	} else if err.Error() != "pq: canceling statement due to user request" {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Transaction is canceled, so expect an error.
-	if _, err := tx.Query("select pg_sleep(1)"); err == nil {
-		t.Fatal("expected error")
-	} else if err != sql.ErrTxDone {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Context is canceled, so cannot begin a transaction.
-	if _, err := db.BeginTx(ctx, nil); err == nil {
-		t.Fatal("expected error")
-	} else if err.Error() != "context canceled" {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	for i := 0; i < contextRaceIterations; i++ {
-		func() {
-			ctx, cancel := context.WithCancel(context.Background())
-			tx, err := db.BeginTx(ctx, nil)
-			cancel()
-			if err != nil {
-				t.Fatal(err)
-			} else if err := tx.Rollback(); err != nil &&
-				err.Error() != "pq: canceling statement due to user request" &&
-				err != sql.ErrTxDone && err != driver.ErrBadConn {
-				t.Fatal(err)
-			}
-		}()
-
-		if tx, err := db.Begin(); err != nil {
-			t.Fatal(err)
-		} else if err := tx.Rollback(); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
+// func TestContextCancelBegin(t *testing.T) {
+// 	db := openTestConn(t)
+// 	defer db.Close()
+//
+// 	ctx, cancel := context.WithCancel(context.Background())
+// 	tx, err := db.BeginTx(ctx, nil)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	// Delay execution for just a bit until tx.Exec has begun.
+// 	defer time.AfterFunc(time.Millisecond*10, cancel).Stop()
+//
+// 	// Not canceled until after the exec has started.
+// 	if _, err := tx.Exec("select pg_sleep(1)"); err == nil {
+// 		t.Fatal("expected error")
+// 	} else if err.Error() != "pq: canceling statement due to user request" {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	}
+//
+// 	// Transaction is canceled, so expect an error.
+// 	if _, err := tx.Query("select pg_sleep(1)"); err == nil {
+// 		t.Fatal("expected error")
+// 	} else if err != sql.ErrTxDone {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	}
+//
+// 	// Context is canceled, so cannot begin a transaction.
+// 	if _, err := db.BeginTx(ctx, nil); err == nil {
+// 		t.Fatal("expected error")
+// 	} else if err.Error() != "context canceled" {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	}
+//
+// 	for i := 0; i < contextRaceIterations; i++ {
+// 		func() {
+// 			ctx, cancel := context.WithCancel(context.Background())
+// 			tx, err := db.BeginTx(ctx, nil)
+// 			cancel()
+// 			if err != nil {
+// 				t.Fatal(err)
+// 			} else if err := tx.Rollback(); err != nil &&
+// 				err.Error() != "pq: canceling statement due to user request" &&
+// 				err != sql.ErrTxDone && err != driver.ErrBadConn {
+// 				t.Fatal(err)
+// 			}
+// 		}()
+//
+// 		if tx, err := db.Begin(); err != nil {
+// 			t.Fatal(err)
+// 		} else if err := tx.Rollback(); err != nil {
+// 			t.Fatal(err)
+// 		}
+// 	}
+// }
 
 func TestTxOptions(t *testing.T) {
 	db := openTestConn(t)
@@ -280,10 +279,10 @@ func TestTxOptions(t *testing.T) {
 			level:     sql.LevelRepeatableRead,
 			isolation: "repeatable read",
 		},
-		{
-			level:     sql.LevelSerializable,
-			isolation: "serializable",
-		},
+		// {
+		// 	level:     sql.LevelSerializable,
+		// 	isolation: "serializable",
+		// },
 	}
 
 	for _, test := range tests {

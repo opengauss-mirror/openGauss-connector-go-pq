@@ -65,4 +65,3 @@ func main() {
 ## Tests
 
 `go test` is used for testing.  See [TESTS.md](TESTS.md) for more details.
-

@@ -1,6 +1,8 @@
 package pq
 
 import (
+	"database/sql/driver"
+	"io"
 	"math"
 	"reflect"
 	"time"
@@ -67,6 +69,131 @@ func (fd fieldDesc) PrecisionScale() (precision, scale int64, ok bool) {
 	default:
 		return 0, 0, false
 	}
+}
+
+type rowsHeader struct {
+	colNames []string
+	colTyps  []fieldDesc
+	colFmts  []format
+}
+
+type rows struct {
+	cn     *conn
+	finish func()
+	rowsHeader
+	done   bool
+	rb     readBuf
+	result driver.Result
+	tag    string
+
+	next *rowsHeader
+}
+
+func (rs *rows) Close() error {
+	if finish := rs.finish; finish != nil {
+		defer finish()
+	}
+	// no need to look at cn.bad as Next() will
+	for {
+		err := rs.Next(nil)
+		switch err {
+		case nil:
+		case io.EOF:
+			// rs.Next can return io.EOF on both 'Z' (ready for query) and 'T' (row
+			// description, used with HasNextResultSet). We need to fetch messages until
+			// we hit a 'Z', which is done by waiting for done to be set.
+			if rs.done {
+				return nil
+			}
+		default:
+			return err
+		}
+	}
+}
+
+func (rs *rows) Columns() []string {
+	return rs.colNames
+}
+
+func (rs *rows) Result() driver.Result {
+	if rs.result == nil {
+		return emptyRows
+	}
+	return rs.result
+}
+
+func (rs *rows) Tag() string {
+	return rs.tag
+}
+
+func (rs *rows) Next(dest []driver.Value) (err error) {
+	if rs.done {
+		return io.EOF
+	}
+
+	conn := rs.cn
+	if conn.getBad() {
+		return driver.ErrBadConn
+	}
+	defer conn.errRecover(&err)
+
+	for {
+		t := conn.recv1Buf(&rs.rb)
+		switch t {
+		case 'E':
+			err = parseError(&rs.rb)
+		case 'C', 'I':
+			if t == 'C' {
+				rs.result, rs.tag = conn.parseComplete(rs.rb.string())
+			}
+			continue
+		case 'Z':
+			conn.processReadyForQuery(&rs.rb)
+			rs.done = true
+			if err != nil {
+				return err
+			}
+			return io.EOF
+		case 'D':
+			n := rs.rb.int16()
+			if err != nil {
+				conn.setBad()
+				errorf("unexpected DataRow after error %s", err)
+			}
+			if n < len(dest) {
+				dest = dest[:n]
+			}
+			for i := range dest {
+				l := rs.rb.int32()
+				if l == -1 {
+					dest[i] = nil
+					continue
+				}
+				dest[i] = decode(&conn.parameterStatus, rs.rb.next(l), rs.colTyps[i].OID, rs.colFmts[i])
+			}
+			return
+		case 'T':
+			next := parsePortalRowDescribe(&rs.rb)
+			rs.next = &next
+			return io.EOF
+		default:
+			errorf("unexpected message after execute: %q", t)
+		}
+	}
+}
+
+func (rs *rows) HasNextResultSet() bool {
+	hasNext := rs.next != nil && !rs.done
+	return hasNext
+}
+
+func (rs *rows) NextResultSet() error {
+	if rs.next == nil {
+		return io.EOF
+	}
+	rs.rowsHeader = *rs.next
+	rs.next = nil
+	return nil
 }
 
 // ColumnTypeScanType returns the value type that can be used to scan types into.
