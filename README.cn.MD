@@ -1,0 +1,73 @@
+# pq - 用于Go数据库/sql包的Go openGauss驱动程序
+
+fork from [github/lib/pq](https://github/lib/pq)
+
+## 安装
+
+  go get gitee.com/opengauss/openGauss-connector-go-pq
+
+## openGauss版libpq差异
+
+使用原生libpq go驱动程序访问openGauss时，会报以下错误。
+
+```
+ pq: Invalid username/password,login denied.
+```
+
+因为openGauss默认的用户连接密码认证方法是sha256，这是唯一的加密方法。 openGauss配置经以下几种方法修改后支持原生libpq连接。
+
+1. 设置openGauss初始化参数password_encryption_type。
+
+```
+alter system set password_encryption_type=0;
+```
+
+2. 设置pg_hba.conf以允许md5密码验证：host all test 0.0.0.0/0 md5。
+
+3. 在数据库中创建新用户，然后通过此用户连接。
+
+不过，我们仍然更倾向使用像sha256这样更安全的加密方法，修改后的libpq可以直接兼容sha256。
+
+## 特性
+
+* 适配openGauss SHA256密码认证
+* SSL
+* 处理`database/sql`坏连接
+* 正确扫描`time.Time`（即`timestamp[tz]`, `time[tz]`, `date`）
+* 正确扫描二进制Blob（即`bytea`）
+* 支持`hstore`软件包
+* 支持COPY FROM
+* pq.ParseURL用于将URL转换为sql.Open的连接字符串。
+* libpq兼容的环境变量
+* 支持Unix套接字
+* 通知：`LISTEN`/`NOTIFY`
+* 支持pgpass
+* GSS（Kerberos）验证
+
+## 示例
+
+```
+import (
+ "database/sql"
+
+ _ "gitee.com/opengauss/openGauss-connector-go-pq"
+)
+
+func main() {
+ connStr := "host=127.0.0.1 port=5432 user=gaussdb password=test@1234 dbname=postgres sslmode=disable"
+ db, err := sql.Open("opengauss", connStr)
+ if err != nil {
+  log.Fatal(err)
+ }
+ var date string
+ err = db.QueryRow("select current_date ").Scan(&date)
+ if err != nil {
+  log.Fatal(err)
+ }
+ fmt.Println(date)
+}
+```
+
+## 测试
+
+`go test`适用于测试。 有关更多详细信息，请参见[测试.md](TESTS.md)。
