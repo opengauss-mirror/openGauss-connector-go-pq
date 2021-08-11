@@ -72,10 +72,13 @@ func hexStringToBytes(hexString string) []byte {
 	}
 	return array
 }
+func generateKFromPBKDF2NoSerIter(password string, random64code string) []byte {
+	return generateKFromPBKDF2(password, random64code, 2048)
+}
 
-func generateKFromPBKDF2(password string, random64code string, server_iteration int) []byte {
+func generateKFromPBKDF2(password string, random64code string, serverIteration int) []byte {
 	random32code := hexStringToBytes(random64code)
-	pwdEn := pbkdf2.Key([]byte(password), random32code, server_iteration, 32, sha1.New)
+	pwdEn := pbkdf2.Key([]byte(password), random32code, serverIteration, 32, sha1.New)
 	return pwdEn
 }
 
@@ -107,7 +110,7 @@ func getSha256(message []byte) []byte {
 	return hash.Sum(nil)
 }
 
-func XOR_between_password(password1 []byte, password2 []byte, length int) []byte {
+func XorBetweenPassword(password1 []byte, password2 []byte, length int) []byte {
 	array := make([]byte, length)
 	for i := 0; i < length; i++ {
 		array[i] = (password1[i] ^ password2[i])
@@ -125,7 +128,7 @@ func bytesToHex(bytes []byte) []byte {
 		j := c >> 4
 		result[pos] = lookup[j]
 		pos++
-		j = (c & 0xF)
+		j = c & 0xF
 		result[pos] = lookup[j]
 		pos++
 	}
@@ -133,19 +136,119 @@ func bytesToHex(bytes []byte) []byte {
 
 }
 
-func RFC5802Algorithm(password string, random64code string, token string, server_signature string, server_iteration int) []byte {
-	k := generateKFromPBKDF2(password, random64code, server_iteration)
-	server_key := getKeyFromHmac(k, []byte("Sever Key"))
-	client_key := getKeyFromHmac(k, []byte("Client Key"))
-	stored_key := getSha256(client_key)
-	tokenbyte := hexStringToBytes(token)
-	client_signature := getKeyFromHmac(server_key, tokenbyte)
-	if server_signature != "" && server_signature != bytesToHexString(client_signature) {
+/*
+RFC5802Algorithm
+   public static byte[] RFC5802Algorithm(
+           String password, String random64code, String token, String server_signature, int server_iteration) {
+       byte[] h = null;
+       byte[] result = null;
+       try {
+           byte[] K = generateKFromPBKDF2(password, random64code, server_iteration);
+           byte[] server_key = getKeyFromHmac(K, "Sever Key".getBytes("UTF-8"));
+           byte[] client_key = getKeyFromHmac(K, "Client Key".getBytes("UTF-8"));
+           byte[] stored_key = null;
+           if (getIsSha256()) {
+           	stored_key = sha256(client_key);
+           } else {
+           	stored_key = sm3(client_key);
+           }
+           byte[] tokenbyte = hexStringToBytes(token);
+           byte[] client_signature = getKeyFromHmac(server_key, tokenbyte);
+           if (server_signature != null && !server_signature.equals(bytesToHexString(client_signature))) return new byte[0];
+           byte[] hmac_result = getKeyFromHmac(stored_key, tokenbyte);
+           h = XOR_between_password(hmac_result, client_key, client_key.length);
+           result = new byte[h.length * 2];
+           bytesToHex(h, result, 0, h.length);
+       } catch (Exception e) {
+           LOGGER.info("RFC5802Algorithm failed. " + e.toString());
+       }
+       return result;
+   }
+*/
+func RFC5802Algorithm(password string, random64code string, token string, serverSignature string, serverIteration int) []byte {
+	k := generateKFromPBKDF2(password, random64code, serverIteration)
+	serverKey := getKeyFromHmac(k, []byte("Sever Key"))
+	clientKey := getKeyFromHmac(k, []byte("Client Key"))
+	storedKey := getSha256(clientKey)
+	tokenByte := hexStringToBytes(token)
+	clientSignature := getKeyFromHmac(serverKey, tokenByte)
+	if serverSignature != "" && serverSignature != bytesToHexString(clientSignature) {
 		return []byte("")
 	}
-	hmac_result := getKeyFromHmac(stored_key, tokenbyte)
-	h := XOR_between_password(hmac_result, client_key, len(client_key))
+	hmacResult := getKeyFromHmac(storedKey, tokenByte)
+	h := XorBetweenPassword(hmacResult, clientKey, len(clientKey))
 	result := bytesToHex(h)
 	return result
 
 }
+
+/*
+	Md5Sha256encode
+   public static byte[] Md5Sha256encode(String password, String random64code, byte salt[]) {
+       MessageDigest md;
+       byte[] temp_digest, pass_digest;
+       byte[] hex_digest = new byte[35];
+       try {
+           StringBuilder stringBuilder = new StringBuilder("");
+           byte[] K = MD5Digest.generateKFromPBKDF2(password, random64code);
+           byte[] server_key = MD5Digest.getKeyFromHmac(K, "Sever Key".getBytes("UTF-8"));
+           byte[] client_key = MD5Digest.getKeyFromHmac(K, "Client Key".getBytes("UTF-8"));
+           byte[] stored_key = MD5Digest.sha256(client_key);
+           stringBuilder.append(random64code);
+           stringBuilder.append(MD5Digest.bytesToHexString(server_key));
+           stringBuilder.append(MD5Digest.bytesToHexString(stored_key));
+           String EncryptString = stringBuilder.toString();
+           md = MessageDigest.getInstance("MD5");
+           md.update(EncryptString.getBytes("UTF-8"));
+           md.update(salt);
+           pass_digest = md.digest();
+           bytesToHex(pass_digest, hex_digest, 3, 16);
+           hex_digest[0] = (byte) 'm';
+           hex_digest[1] = (byte) 'd';
+           hex_digest[2] = (byte) '5';
+       } catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
+           LOGGER.info("MD5_SHA256encode failed. ", e);
+       } catch (Exception e) {
+           LOGGER.info("MD5_SHA256encode failed. ", e);
+       }
+       return hex_digest;
+   }
+*/
+func Md5Sha256encode(password, random64code string, salt []byte) []byte {
+	k := generateKFromPBKDF2NoSerIter(password, random64code)
+	serverKey := getKeyFromHmac(k, []byte("Sever Key"))
+	clientKey := getKeyFromHmac(k, []byte("Client Key"))
+	storedKey := getSha256(clientKey)
+	EncryptString := random64code + bytesToHexString(serverKey) + bytesToHexString(storedKey)
+	passDigest := md5s(EncryptString + string(salt))
+	return bytesToHex([]byte(passDigest)[:16])
+}
+
+/*
+   public static byte[] SHA256_MD5encode(byte user[], byte password[], byte salt[]) {
+       MessageDigest md, sha;
+       byte[] temp_digest, pass_digest;
+       byte[] hex_digest = new byte[70];
+       try {
+           md = MessageDigest.getInstance("MD5");
+           md.update(password);
+           md.update(user);
+           temp_digest = md.digest();
+           bytesToHex(temp_digest, hex_digest, 0, 16);
+           sha = MessageDigest.getInstance("SHA-256");
+           sha.update(hex_digest, 0, 32);
+           sha.update(salt);
+           pass_digest = sha.digest();
+           bytesToHex(pass_digest, hex_digest, 6, 32);
+           hex_digest[0] = (byte) 's';
+           hex_digest[1] = (byte) 'h';
+           hex_digest[2] = (byte) 'a';
+           hex_digest[3] = (byte) '2';
+           hex_digest[4] = (byte) '5';
+           hex_digest[5] = (byte) '6';
+       } catch (Exception e) {
+           LOGGER.info("SHA256_MD5encode failed. " + e.toString());
+       }
+       return hex_digest;
+   }
+*/

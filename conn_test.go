@@ -1806,3 +1806,46 @@ func TestCopyInStmtAffectedRows(t *testing.T) {
 	res.RowsAffected()
 	res.LastInsertId()
 }
+
+// func Test_connect(t *testing.T) {
+//
+// 	tests := []struct {
+// 		name    string
+// 		dsn     string
+// 		wantErr bool
+// 	}{
+// 		{
+// 			name:    "user_existed",
+// 			dsn:     "host=localhost user=mogdb_usr password=mogdb@1236 port=5433 dbname=postgres sslmode=disable",
+// 			wantErr: false,
+// 		},
+// 		{
+// 			name:    "user_password_error",
+// 			dsn:     "host=localhost user=mogdb_usr password=mogdb@12356777 port=5433 dbname=postgres sslmode=disable",
+// 			wantErr: true,
+// 		},
+// 		{
+// 			name:    "user_not_existed",
+// 			dsn:     "host=localhost user=mogdb_usr1 password=mogdb@123 port=5433 dbname=postgres sslmode=disable",
+// 			wantErr: true,
+// 		},
+// 	}
+//
+// 	for _, tt := range tests {
+// 		t.Run(tt.name, func(t *testing.T) {
+// 			db, err := openTestConnConninfo(tt.dsn)
+// 			// if (err != nil) != tt.wantErr {
+// 			// 	t.Errorf("openTestConnConninfo() error = %v, wantErr %v", err, tt.wantErr)
+// 			// 	return
+// 			// }
+// 			var a string
+// 			err = db.QueryRow("select 1").Scan(&a)
+// 			if (err != nil) != tt.wantErr {
+// 				t.Errorf("QueryRow() error = %v, wantErr %v", err, tt.wantErr)
+// 				return
+// 			}
+// 			fmt.Println(a)
+// 		})
+// 	}
+//
+// }
