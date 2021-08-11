@@ -1,36 +1,68 @@
-# openGauss-connector-go-pq
+# pq - A pure Go openGauss driver for Go's database/sql package
 
-#### Description
-{**When you're done, you can delete the content in this README and update the file with details for others getting started with your repository**}
+fork from [github/lib/pq](https://github/lib/pq)
 
-#### Software Architecture
-Software architecture description
+## Install
 
-#### Installation
+	go get gitee.com/opengauss/openGauss-connector-go-pq
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+## What's the difference of libpq for openGauss
+When using original libpq go driver to access openGauss, the following error will be reported.
+```
+ pq: Invalid username/password,login denied.
+```
+The reason is that openGauss default user connection password authentication method is sha256, which is a unique encryption method. Although openGauss configuration can be modified by the following methods to support native libpq connection.
 
-#### Instructions
+1. Set the openGauss initialization parameter password_encryption_type.
+```
+alter system set password_encryption_type=0;
+```
+2. Set pg_hba.conf to allow md5 password verification: host all test 0.0.0.0/0 md5
+3. Create a new user in database, then connect by this user.
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+We still prefer to use a more secure encryption method like sha256, so the modified libpq can be directly compatible with sha256.
 
-#### Contribution
+## Features
 
-1.  Fork the repository
-2.  Create Feat_xxx branch
-3.  Commit your code
-4.  Create Pull Request
+* Adapt openGauss SHA256 password authentication
+* SSL
+* Handles bad connections for `database/sql`
+* Scan `time.Time` correctly (i.e. `timestamp[tz]`, `time[tz]`, `date`)
+* Scan binary blobs correctly (i.e. `bytea`)
+* Package for `hstore` support
+* COPY FROM support
+* pq.ParseURL for converting urls to connection strings for sql.Open.
+* Many libpq compatible environment variables
+* Unix socket support
+* Notifications: `LISTEN`/`NOTIFY`
+* pgpass support
+* GSS (Kerberos) auth
 
 
-#### Gitee Feature
+## Example
+```
+import (
+	"database/sql"
 
-1.  You can use Readme\_XXX.md to support different languages, such as Readme\_en.md, Readme\_zh.md
-2.  Gitee blog [blog.gitee.com](https://blog.gitee.com)
-3.  Explore open source project [https://gitee.com/explore](https://gitee.com/explore)
-4.  The most valuable open source project [GVP](https://gitee.com/gvp)
-5.  The manual of Gitee [https://gitee.com/help](https://gitee.com/help)
-6.  The most popular members  [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+	_ "gitee.com/opengauss/openGauss-connector-go-pq"
+)
+
+func main() {
+	connStr := "host=127.0.0.1 port=5432 user=gaussdb password=test@1234 dbname=postgres sslmode=disable"
+	db, err := sql.Open("opengauss", connStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var date string
+	err = db.QueryRow("select current_date ").Scan(&date)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(date)
+}
+```
+
+## Tests
+
+`go test` is used for testing.  See [TESTS.md](TESTS.md) for more details.
+
