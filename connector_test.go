@@ -6,8 +6,6 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-	"fmt"
-	_ "github.com/jackc/pgx/v4/stdlib"
 	"testing"
 )
 
@@ -68,29 +66,29 @@ func TestNewConnector_Driver(t *testing.T) {
 	txn.Rollback()
 }
 
-func Test_Connect_DB(t *testing.T) {
-
-	db, err := sql.Open("opengauss", "postgres://gaussdb:mtkOP@123@127.0.0.1:5435,127.0.0.1:5434/postgres?sslmode=disable&loggerLevel=debug")
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	err = db.Ping()
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	var v string
-	err = db.QueryRow("select version()").Scan(&v)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	fmt.Println(v)
-	err = db.QueryRow("SELECT pg_is_in_recovery()").Scan(&v)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	fmt.Println(v)
-}
+// func Test_Connect_DB(t *testing.T) {
+//
+// 	db, err := sql.Open("opengauss", "postgres://gaussdb:mtkOP@123@127.0.0.1:5435,127.0.0.1:5434/postgres?sslmode=disable&loggerLevel=debug")
+// 	if err != nil {
+// 		t.Error(err)
+// 		return
+// 	}
+// 	err = db.Ping()
+// 	if err != nil {
+// 		t.Error(err)
+// 		return
+// 	}
+// 	var v string
+// 	err = db.QueryRow("select version()").Scan(&v)
+// 	if err != nil {
+// 		t.Error(err)
+// 		return
+// 	}
+// 	fmt.Println(v)
+// 	err = db.QueryRow("SELECT pg_is_in_recovery()").Scan(&v)
+// 	if err != nil {
+// 		t.Error(err)
+// 		return
+// 	}
+// 	fmt.Println(v)
+// }

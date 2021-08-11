@@ -31,7 +31,7 @@ func defaultSettings() map[string]string {
 		settings["servicefile"] = filepath.Join(user.HomeDir, ".pg_service.conf")
 	}
 
-	settings["target_session_attrs"] = "any"
+	settings["target_session_attrs"] = targetSessionAttrsReadWrite
 
 	settings["min_read_buffer_size"] = "8192"
 
@@ -39,7 +39,7 @@ func defaultSettings() map[string]string {
 }
 
 // defaultHost attempts to mimic libpq's default host. libpq uses the default unix socket location on *nix and localhost
-// on Windows. The default socket location is compiled into libpq. Since pgx does not have access to that default it
+// on Windows. The default socket location is compiled into libpq. Since conn does not have access to that default it
 // checks the existence of common locations.
 func defaultHost() string {
 	return "localhost"

@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+const (
+	targetSessionAttrsReadWrite = "read-write"
+	targetSessionAttrsReadOnly  = "read-only"
+)
+
 // Compile time validation that our types implement the expected interfaces
 var (
 	_ driver.Driver = Driver{}
@@ -165,6 +170,7 @@ func (c *Connector) connect(ctx context.Context, config *Config) (cn *conn, err 
 			err: errors.New("ip addr wasn't found")}
 	}
 	for _, fc := range fallbackConfigs {
+
 		cn, err = c.connectFallbackConfig(ctx, config, fc)
 		if err != nil {
 			if pgErr, ok := err.(*Error); ok {
@@ -180,36 +186,33 @@ func (c *Connector) connect(ctx context.Context, config *Config) (cn *conn, err 
 				config.Logger.Log(nil, LogLevelDebug, err.Error(), map[string]interface{}{
 					"host": fc.Host, "port": fc.Port})
 			}
-
 			continue
 		}
-
-		if len(fallbackConfigs) > 1 {
-			primary, err := cn.isPrimary()
-			if err != nil {
-				if pgErr, ok := err.(*Error); ok {
-					err = &connectError{config: config, msg: "server error", err: pgErr}
-					ErrCodeInvalidPassword := "28P01"                   // worng password
-					ErrCodeInvalidAuthorizationSpecification := "28000" // db does not exist
-					if pgErr.Code.String() == ErrCodeInvalidPassword ||
-						pgErr.Code.String() == ErrCodeInvalidAuthorizationSpecification {
-						break
-					}
-				}
-				if config.shouldLog(LogLevelDebug) {
-					config.Logger.Log(nil, LogLevelDebug, "connect instance failed", map[string]interface{}{
-						"host": fc.Host, "port": fc.Port, "err": err.Error()})
-				}
-				continue
-			}
-			if primary {
-				if config.shouldLog(LogLevelDebug) {
-					config.Logger.Log(nil, LogLevelDebug, "find primary instance", map[string]interface{}{
-						"host": fc.Host, "port": fc.Port})
-				}
-				break
-			}
+		if config.shouldLog(LogLevelDebug) {
+			config.Logger.Log(nil, LogLevelDebug, "find instance", map[string]interface{}{
+				"host": fc.Host, "port": fc.Port})
 		}
+		break
+		// if len(fallbackConfigs) > 1 {
+		// 	find, err := cn.ValidateConnect()
+		// 	if err != nil {
+		// 		if pgErr, ok := err.(*Error); ok {
+		// 			err = &connectError{config: config, msg: "server error", err: pgErr}
+		// 			ErrCodeInvalidPassword := "28P01"                   // worng password
+		// 			ErrCodeInvalidAuthorizationSpecification := "28000" // db does not exist
+		// 			if pgErr.Code.String() == ErrCodeInvalidPassword ||
+		// 				pgErr.Code.String() == ErrCodeInvalidAuthorizationSpecification {
+		// 				break
+		// 			}
+		// 		}
+
+		// 		continue
+		// 	}
+		// 	if find {
+
+		// 		break
+		// 	}
+		// }
 
 	}
 
@@ -251,6 +254,7 @@ func (c *Connector) connectFallbackConfig(ctx context.Context, config *Config, f
 	}()
 
 	cn.buf = bufio.NewReader(cn.c)
+	defer cn.errRecover(&err) // 捕获panic
 	cn.startup()
 
 	// reset the deadline, in case one was set (see dial)

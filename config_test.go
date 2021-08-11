@@ -205,7 +205,7 @@ func TestParseConfig(t *testing.T) {
 		},
 		{
 			name:       "database url everything",
-			connString: "postgres://gaussdb:secret@localhost:5432/mydb?sslmode=disable&application_name=pgxtest&search_path=myschema&connect_timeout=5",
+			connString: "postgres://gaussdb:secret@localhost:5432/mydb?sslmode=disable&application_name=conntest&search_path=myschema&connect_timeout=5",
 			config: &Config{
 				User:           "gaussdb",
 				Password:       "secret",
@@ -215,7 +215,7 @@ func TestParseConfig(t *testing.T) {
 				TLSConfig:      nil,
 				ConnectTimeout: 5 * time.Second,
 				RuntimeParams: map[string]string{
-					"application_name": "pgxtest",
+					"application_name": "conntest",
 					"search_path":      "myschema",
 				},
 			},
@@ -319,7 +319,7 @@ func TestParseConfig(t *testing.T) {
 		},
 		{
 			name:       "DSN everything",
-			connString: "user=gaussdb password=secret host=localhost port=5432 dbname=mydb sslmode=disable application_name=pgxtest search_path=myschema connect_timeout=5",
+			connString: "user=gaussdb password=secret host=localhost port=5432 dbname=mydb sslmode=disable application_name=conntest search_path=myschema connect_timeout=5",
 			config: &Config{
 				User:           "gaussdb",
 				Password:       "secret",
@@ -329,7 +329,7 @@ func TestParseConfig(t *testing.T) {
 				TLSConfig:      nil,
 				ConnectTimeout: 5 * time.Second,
 				RuntimeParams: map[string]string{
-					"application_name": "pgxtest",
+					"application_name": "conntest",
 					"search_path":      "myschema",
 				},
 			},
@@ -597,7 +597,7 @@ func TestParseConfigDSNTrailingBackslash(t *testing.T) {
 }
 
 func TestConfigCopyReturnsEqualConfig(t *testing.T) {
-	connString := "postgres://gaussdb:secret@localhost:5432/mydb?application_name=pgxtest&search_path=myschema&connect_timeout=5"
+	connString := "postgres://gaussdb:secret@localhost:5432/mydb?application_name=conntest&search_path=myschema&connect_timeout=5"
 	original, err := ParseConfig(connString)
 	require.NoError(t, err)
 
@@ -606,7 +606,7 @@ func TestConfigCopyReturnsEqualConfig(t *testing.T) {
 }
 
 func TestConfigCopyOriginalConfigDidNotChange(t *testing.T) {
-	connString := "postgres://gaussdb:secret@localhost:5432/mydb?application_name=pgxtest&search_path=myschema&connect_timeout=5&sslmode=prefer"
+	connString := "postgres://gaussdb:secret@localhost:5432/mydb?application_name=conntest&search_path=myschema&connect_timeout=5&sslmode=prefer"
 	original, err := ParseConfig(connString)
 	require.NoError(t, err)
 
@@ -728,7 +728,7 @@ func TestParseConfigEnvLibpq(t *testing.T) {
 				"PGPASSWORD":        "baz",
 				"PGCONNECT_TIMEOUT": "10",
 				"PGSSLMODE":         "disable",
-				"PGAPPNAME":         "pgxtest",
+				"PGAPPNAME":         "conntest",
 			},
 			config: &Config{
 				Host:           "123.123.123.123",
@@ -738,7 +738,7 @@ func TestParseConfigEnvLibpq(t *testing.T) {
 				Password:       "baz",
 				ConnectTimeout: 10 * time.Second,
 				TLSConfig:      nil,
-				RuntimeParams:  map[string]string{"application_name": "pgxtest"},
+				RuntimeParams:  map[string]string{"application_name": "conntest"},
 			},
 		},
 	}

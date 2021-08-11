@@ -21,7 +21,7 @@ const (
 	LogLevelNone  = 1
 )
 
-// LogLevel represents the pgx logging level. See LogLevel* constants for
+// LogLevel represents the conn logging level. See LogLevel* constants for
 // possible values.
 type LogLevel int
 
@@ -44,7 +44,7 @@ func (ll LogLevel) String() string {
 	}
 }
 
-// Logger is the interface used to get logging from pgx internals.
+// Logger is the interface used to get logging from conn internals.
 type Logger interface {
 	// Log a message at the given level with data key/value pairs. data may be nil.
 	Log(ctx context.Context, level LogLevel, msg string, data map[string]interface{})

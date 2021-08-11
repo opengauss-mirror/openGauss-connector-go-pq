@@ -25,6 +25,7 @@ We still prefer to use a more secure encryption method like sha256, so the modif
 ## Features
 
 * Adapt openGauss SHA256 password authentication
+* Support for multiple host defined connections
 * SSL
 * Handles bad connections for `database/sql`
 * Scan `time.Time` correctly (i.e. `timestamp[tz]`, `time[tz]`, `date`)
@@ -38,6 +39,26 @@ We still prefer to use a more secure encryption method like sha256, so the modif
 * pgpass support
 * GSS (Kerberos) auth
 
+## Multiple Hosts
+
+example [multi_ip](example/multi_ip/multi_ip.go)
+
+postgres docs[LIBPQ-MULTIPLE-HOSTS](https://www.postgresql.org/docs/10/libpq-connect.html#LIBPQ-MULTIPLE-HOSTS)
+
+
+- Support to define the master and slave addresses at the same time, automatically select the main library connection, 
+and automatically connect to the new master library when a switch occurs.
+
+- The target_session_attrs parameter in the connection character can only define read-write (default configuration),
+and there is a problem with the configuration as read-only
+  
+
+```
+postgres://gaussdb:secret@foo,bar,baz/mydb?sslmode=disable
+postgres://gaussdb:secret@foo:1,bar:2,baz:3/mydb?sslmode=disable
+user=gaussdb password=secret host=foo,bar,baz port=5432 dbname=mydb sslmode=disable
+user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb sslmode=disable
+```
 
 ## Example
 ```

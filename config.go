@@ -23,7 +23,8 @@ import (
 )
 
 // type AfterConnectFunc func(ctx context.Context, pgconn *PgConn) error
-// type ValidateConnectFunc func(ctx context.Context, pgconn *PgConn) error
+
+// type ValidateConnectFunc func(ctx context.Context, conn *conn) error
 
 // Config is the settings used to establish a connection to a PostgreSQL server. It must be created by ParseConfig. A
 // manually initialized Config will cause ConnectConfig to panic.
@@ -42,6 +43,7 @@ type Config struct {
 	GssAPIParams  map[string]string
 	Fallbacks     []*FallbackConfig
 
+	targetSessionAttrs string
 	// ValidateConnect is called during a connection attempt after a successful authentication with the PostgreSQL server.
 	// It can be used to validate that the server is acceptable. If this returns an error the connection is closed and the next
 	// fallback config is tried. This allows implementing high availability behavior such as libpq does with target_session_attrs.
@@ -354,10 +356,10 @@ func ParseConfig(connString string) (*Config, error) {
 		}
 	}
 
-	if settings["target_session_attrs"] == "read-write" {
-		// TODO
+	if settings["target_session_attrs"] == "read-write" || settings["target_session_attrs"] == "read-only" {
 		// config.ValidateConnect = ValidateConnectTargetSessionAttrsReadWrite
-	} else if settings["target_session_attrs"] != "any" {
+		config.targetSessionAttrs = settings["target_session_attrs"]
+	} else {
 		return nil, &parseConfigError{connString: connString, msg: fmt.Sprintf("unknown target_session_attrs value: %v", settings["target_session_attrs"])}
 	}
 
