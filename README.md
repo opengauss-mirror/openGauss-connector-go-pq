@@ -1,6 +1,6 @@
 # pq - A pure Go openGauss driver for Go's database/sql package
 
-fork from [github/lib/pq](https://github/lib/pq)
+fork from [github/lib/pq](https://github.com/lib/pq)
 
 ## Install
 
