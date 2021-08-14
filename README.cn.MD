@@ -1,6 +1,6 @@
 # pq - 用于Go数据库/sql包的Go openGauss驱动程序
 
-fork from [github/lib/pq](https://github/lib/pq)
+fork from [github/lib/pq](https://github.com/lib/pq)
 
 ## 安装
 
