@@ -162,39 +162,6 @@ func (cn *conn) writeBuf(b byte) *writeBuf {
 
 type values map[string]string
 
-//
-// // scanner implements a tokenizer for libpq-style option strings.
-// type scanner struct {
-// 	s []rune
-// 	i int
-// }
-
-// // newScanner returns a new scanner initialized with the option string s.
-// func newScanner(s string) *scanner {
-// 	return &scanner{[]rune(s), 0}
-// }
-//
-// // Next returns the next rune.
-// // It returns 0, false if the end of the text has been reached.
-// func (s *scanner) Next() (rune, bool) {
-// 	if s.i >= len(s.s) {
-// 		return 0, false
-// 	}
-// 	r := s.s[s.i]
-// 	s.i++
-// 	return r, true
-// }
-//
-// // SkipSpaces returns the next non-whitespace rune.
-// // It returns 0, false if the end of the text has been reached.
-// func (s *scanner) SkipSpaces() (rune, bool) {
-// 	r, ok := s.Next()
-// 	for unicode.IsSpace(r) && ok {
-// 		r, ok = s.Next()
-// 	}
-// 	return r, ok
-// }
-
 func (cn *conn) isInTransaction() bool {
 	return cn.txnStatus == txnStatusIdleInTransaction ||
 		cn.txnStatus == txnStatusInFailedTransaction
@@ -883,58 +850,6 @@ func (cn *conn) auth(r *readBuf) {
 			cn.send(w)
 		}
 
-		// Errors fall through and read the more detailed message
-		// from the server..
-
-	// case 10:
-	// 	sc := scram.NewClient(sha256.New, o["user"], o["password"])
-	// 	sc.Step(nil)
-	// 	if sc.Err() != nil {
-	// 		errorf("SCRAM-SHA-256 error: %s", sc.Err().Error())
-	// 	}
-	// 	scOut := sc.Out()
-	//
-	// 	w := cn.writeBuf('p')
-	// 	w.string("SCRAM-SHA-256")
-	// 	w.int32(len(scOut))
-	// 	w.bytes(scOut)
-	// 	cn.send(w)
-	//
-	// 	t, r := cn.recv()
-	// 	if t != 'R' {
-	// 		errorf("unexpected password response: %q", t)
-	// 	}
-	//
-	// 	if r.int32() != 11 {
-	// 		errorf("unexpected authentication response: %q", t)
-	// 	}
-	//
-	// 	nextStep := r.next(len(*r))
-	// 	sc.Step(nextStep)
-	// 	if sc.Err() != nil {
-	// 		errorf("SCRAM-SHA-256 error: %s", sc.Err().Error())
-	// 	}
-	//
-	// 	scOut = sc.Out()
-	// 	w = cn.writeBuf('p')
-	// 	w.bytes(scOut)
-	// 	cn.send(w)
-	//
-	// 	t, r = cn.recv()
-	// 	if t != 'R' {
-	// 		errorf("unexpected password response: %q", t)
-	// 	}
-	//
-	// 	if r.int32() != 12 {
-	// 		errorf("unexpected authentication response: %q", t)
-	// 	}
-	//
-	// 	nextStep = r.next(len(*r))
-	// 	sc.Step(nextStep)
-	// 	if sc.Err() != nil {
-	// 		errorf("SCRAM-SHA-256 error: %s", sc.Err().Error())
-	// 	}
-
 	case 10:
 		// 这里在openGauss为sha256加密办法，主要代码流程来自jdbc相关实现
 		passwordStoredMethod := r.int32()
@@ -990,18 +905,7 @@ func (cn *conn) auth(r *readBuf) {
 
 	// AUTH_REQ_MD5_SHA256
 	case 11:
-		/*
-			LOGGER.trace("AUTH_REQ_MD5_SHA256" + " ID: " + connectInfo);
-			byte[] digest;
-			String random64code = pgStream.receiveString(64);
-			byte[] md5Salt = pgStream.receive(4);
-			digest = MD5Digest.MD5_SHA256encode(password, random64code, md5Salt);
-			pgStream.sendChar('p');
-			pgStream.sendInteger4(4 + digest.length + 1);
-			pgStream.send(digest);
-			pgStream.sendChar(0);
-			pgStream.flush();
-		*/
+
 		random64code := string(r.next(64))
 		md5Salt := r.next(4)
 		result := Md5Sha256encode(cn.config.Password, random64code, md5Salt)
@@ -1034,11 +938,11 @@ func (cn *conn) ValidateConnect() (bool, error) {
 	}
 	sqlText := "show transaction_read_only"
 
-	cn.log(nil, LogLevelDebug, "Check server is transaction_read_only ?", map[string]interface{}{"sql": sqlText,
+	cn.log(context.Background(), LogLevelDebug, "Check server is transaction_read_only ?", map[string]interface{}{"sql": sqlText,
 		"host": cn.config.Host, "port": cn.config.Port, "target_session_attrs": cn.config.targetSessionAttrs})
 	inReRows, err := cn.query(sqlText, nil)
 	if err != nil {
-		cn.log(nil, LogLevelDebug, "err:"+err.Error(), map[string]interface{}{})
+		cn.log(context.Background(), LogLevelDebug, "err:"+err.Error(), map[string]interface{}{})
 		return false, err
 	}
 	defer inReRows.Close()
@@ -1046,11 +950,11 @@ func (cn *conn) ValidateConnect() (bool, error) {
 	lastCols := []driver.Value{&dbTranReadOnly}
 	err = inReRows.Next(lastCols)
 	if err != nil {
-		cn.log(nil, LogLevelDebug, "err:"+err.Error(), map[string]interface{}{})
+		cn.log(context.Background(), LogLevelDebug, "err:"+err.Error(), map[string]interface{}{})
 		return false, err
 	}
 	readOnly := lastCols[0].(string)
-	cn.log(nil, LogLevelDebug, "Check server is readOnly ?", map[string]interface{}{"readOnly": readOnly,
+	cn.log(context.Background(), LogLevelDebug, "Check server is readOnly ?", map[string]interface{}{"readOnly": readOnly,
 		"host": cn.config.Host, "port": cn.config.Port})
 
 	if strings.EqualFold(cn.config.targetSessionAttrs, targetSessionAttrsReadWrite) &&

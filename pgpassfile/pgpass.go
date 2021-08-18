@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"io"
 	"os"
-	"regexp"
 	"strings"
 )
 
@@ -51,7 +50,7 @@ func ParsePassfile(r io.Reader) (*Passfile, error) {
 
 // Match (not colons or escaped colon or escaped backslash)+. Essentially gives a split on unescaped
 // colon.
-var colonSplitterRegexp = regexp.MustCompile("(([^:]|(\\:)))+")
+// var colonSplitterRegexp = regexp.MustCompile("(([^:]|(\\:)))+")
 
 // var colonSplitterRegexp = regexp.MustCompile("((?:[^:]|(?:\\:)|(?:\\\\))+)")
 

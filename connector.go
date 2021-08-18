@@ -183,36 +183,16 @@ func (c *Connector) connect(ctx context.Context, config *Config) (cn *conn, err 
 				}
 			}
 			if config.shouldLog(LogLevelDebug) {
-				config.Logger.Log(nil, LogLevelDebug, err.Error(), map[string]interface{}{
+				config.Logger.Log(context.Background(), LogLevelDebug, err.Error(), map[string]interface{}{
 					"host": fc.Host, "port": fc.Port})
 			}
 			continue
 		}
 		if config.shouldLog(LogLevelDebug) {
-			config.Logger.Log(nil, LogLevelDebug, "find instance", map[string]interface{}{
+			config.Logger.Log(context.Background(), LogLevelDebug, "find instance", map[string]interface{}{
 				"host": fc.Host, "port": fc.Port})
 		}
 		break
-		// if len(fallbackConfigs) > 1 {
-		// 	find, err := cn.ValidateConnect()
-		// 	if err != nil {
-		// 		if pgErr, ok := err.(*Error); ok {
-		// 			err = &connectError{config: config, msg: "server error", err: pgErr}
-		// 			ErrCodeInvalidPassword := "28P01"                   // worng password
-		// 			ErrCodeInvalidAuthorizationSpecification := "28000" // db does not exist
-		// 			if pgErr.Code.String() == ErrCodeInvalidPassword ||
-		// 				pgErr.Code.String() == ErrCodeInvalidAuthorizationSpecification {
-		// 				break
-		// 			}
-		// 		}
-
-		// 		continue
-		// 	}
-		// 	if find {
-
-		// 		break
-		// 	}
-		// }
 
 	}
 

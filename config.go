@@ -16,15 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	// "github.com/jackc/chunkreader/v2"
-	// "github.com/jackc/pgpassfile"
-	// "github.com/jackc/pgproto3/v2"
-	// "github.com/jackc/pgservicefile"
 )
-
-// type AfterConnectFunc func(ctx context.Context, pgconn *PgConn) error
-
-// type ValidateConnectFunc func(ctx context.Context, conn *conn) error
 
 // Config is the settings used to establish a connection to a PostgreSQL server. It must be created by ParseConfig. A
 // manually initialized Config will cause ConnectConfig to panic.
@@ -708,18 +700,6 @@ func makeDefaultDialer() *net.Dialer {
 func makeDefaultResolver() *net.Resolver {
 	return net.DefaultResolver
 }
-
-// func makeDefaultBuildFrontendFunc(minBufferLen int) BuildFrontendFunc {
-// 	return func(r io.Reader, w io.Writer) Frontend {
-// 		cr, err := chunkreader.NewConfig(r, chunkreader.Config{MinBufLen: minBufferLen})
-// 		if err != nil {
-// 			panic(fmt.Sprintf("BUG: chunkreader.NewConfig failed: %v", err))
-// 		}
-// 		frontend := pgproto3.NewFrontend(cr, w)
-//
-// 		return frontend
-// 	}
-// }
 
 func parseConnectTimeoutSetting(s string) (time.Duration, error) {
 	timeout, err := strconv.ParseInt(s, 10, 64)

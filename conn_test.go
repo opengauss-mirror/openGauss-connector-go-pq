@@ -1406,59 +1406,6 @@ func TestErrorClass(t *testing.T) {
 	}
 }
 
-// func TestParseOpts(t *testing.T) {
-// 	tests := []struct {
-// 		in       string
-// 		expected values
-// 		valid    bool
-// 	}{
-// 		{"dbname=hello user=goodbye", values{"dbname": "hello", "user": "goodbye"}, true},
-// 		{"dbname=hello user=goodbye  ", values{"dbname": "hello", "user": "goodbye"}, true},
-// 		{"dbname = hello user=goodbye", values{"dbname": "hello", "user": "goodbye"}, true},
-// 		{"dbname=hello user =goodbye", values{"dbname": "hello", "user": "goodbye"}, true},
-// 		{"dbname=hello user= goodbye", values{"dbname": "hello", "user": "goodbye"}, true},
-// 		{"host=localhost password='correct horse battery staple'", values{"host": "localhost", "password": "correct horse battery staple"}, true},
-// 		{"dbname=データベース password=パスワード", values{"dbname": "データベース", "password": "パスワード"}, true},
-// 		{"dbname=hello user=''", values{"dbname": "hello", "user": ""}, true},
-// 		{"user='' dbname=hello", values{"dbname": "hello", "user": ""}, true},
-// 		// The last option value is an empty string if there's no non-whitespace after its =
-// 		{"dbname=hello user=   ", values{"dbname": "hello", "user": ""}, true},
-//
-// 		// The parser ignores spaces after = and interprets the next set of non-whitespace characters as the value.
-// 		{"user= password=foo", values{"user": "password=foo"}, true},
-//
-// 		// Backslash escapes next char
-// 		{`user=a\ \'\\b`, values{"user": `a '\b`}, true},
-// 		{`user='a \'b'`, values{"user": `a 'b`}, true},
-//
-// 		// Incomplete escape
-// 		{`user=x\`, values{}, false},
-//
-// 		// No '=' after the key
-// 		{"postgre://marko@internet", values{}, false},
-// 		{"dbname user=goodbye", values{}, false},
-// 		{"user=foo blah", values{}, false},
-// 		{"user=foo blah   ", values{}, false},
-//
-// 		// Unterminated quoted value
-// 		{"dbname=hello user='unterminated", values{}, false},
-// 	}
-//
-// 	for _, test := range tests {
-// 		o := make(values)
-// 		err := parseOpts(test.in, o)
-//
-// 		switch {
-// 		case err != nil && test.valid:
-// 			t.Errorf("%q got unexpected error: %s", test.in, err)
-// 		case err == nil && test.valid && !reflect.DeepEqual(test.expected, o):
-// 			t.Errorf("%q got: %#v want: %#v", test.in, o, test.expected)
-// 		case err == nil && !test.valid:
-// 			t.Errorf("%q expected an error", test.in)
-// 		}
-// 	}
-// }
-
 func TestRuntimeParameters(t *testing.T) {
 	tests := []struct {
 		conninfo string
@@ -1804,46 +1751,3 @@ func TestCopyInStmtAffectedRows(t *testing.T) {
 	res.RowsAffected()
 	res.LastInsertId()
 }
-
-// func Test_connect(t *testing.T) {
-//
-// 	tests := []struct {
-// 		name    string
-// 		dsn     string
-// 		wantErr bool
-// 	}{
-// 		{
-// 			name:    "user_existed",
-// 			dsn:     "host=localhost user=mogdb_usr password=mogdb@1236 port=5433 dbname=postgres sslmode=disable",
-// 			wantErr: false,
-// 		},
-// 		{
-// 			name:    "user_password_error",
-// 			dsn:     "host=localhost user=mogdb_usr password=mogdb@12356777 port=5433 dbname=postgres sslmode=disable",
-// 			wantErr: true,
-// 		},
-// 		{
-// 			name:    "user_not_existed",
-// 			dsn:     "host=localhost user=mogdb_usr1 password=mogdb@123 port=5433 dbname=postgres sslmode=disable",
-// 			wantErr: true,
-// 		},
-// 	}
-//
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			db, err := openTestConnConninfo(tt.dsn)
-// 			// if (err != nil) != tt.wantErr {
-// 			// 	t.Errorf("openTestConnConninfo() error = %v, wantErr %v", err, tt.wantErr)
-// 			// 	return
-// 			// }
-// 			var a string
-// 			err = db.QueryRow("select 1").Scan(&a)
-// 			if (err != nil) != tt.wantErr {
-// 				t.Errorf("QueryRow() error = %v, wantErr %v", err, tt.wantErr)
-// 				return
-// 			}
-// 			fmt.Println(a)
-// 		})
-// 	}
-//
-// }

@@ -87,5 +87,8 @@ func getNodeName(db *sql.DB) error {
 	err = db.QueryRow("select channel from pg_stat_get_wal_senders() limit 1 ").
 		Scan(&channel)
 	fmt.Println(sysdate, nodeName, pgIsInRecovery, channel)
+	if err != nil {
+		return err
+	}
 	return nil
 }

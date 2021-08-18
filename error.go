@@ -543,10 +543,6 @@ func (e *connectError) Unwrap() error {
 	return e.err
 }
 
-type connLockError struct {
-	status string
-}
-
 type parseConfigError struct {
 	connString string
 	msg        string
