@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
+	"regexp"
 	"runtime"
+	"strings"
 )
 
 // Error severities
@@ -52,6 +55,10 @@ type ErrorCode string
 // details.
 func (ec ErrorCode) Name() string {
 	return errorCodeNames[ec]
+}
+
+func (ec ErrorCode) String() string {
+	return string(ec)
 }
 
 // ErrorClass is only the class part of an error code.
@@ -515,4 +522,66 @@ func (cn *conn) errRecover(err *error) {
 	if *err == driver.ErrBadConn {
 		cn.setBad()
 	}
+}
+
+type connectError struct {
+	config *Config
+	msg    string
+	err    error
+}
+
+func (e *connectError) Error() string {
+	sb := &strings.Builder{}
+	fmt.Fprintf(sb, "failed to connect to `host=%s user=%s database=%s`: %s", e.config.Host, e.config.User, e.config.Database, e.msg)
+	if e.err != nil {
+		fmt.Fprintf(sb, " (%s)", e.err.Error())
+	}
+	return sb.String()
+}
+
+func (e *connectError) Unwrap() error {
+	return e.err
+}
+
+type parseConfigError struct {
+	connString string
+	msg        string
+	err        error
+}
+
+func (e *parseConfigError) Error() string {
+	connString := redactPW(e.connString)
+	if e.err == nil {
+		return fmt.Sprintf("cannot parse `%s`: %s", connString, e.msg)
+	}
+	return fmt.Sprintf("cannot parse `%s`: %s (%s)", connString, e.msg, e.err.Error())
+}
+
+func (e *parseConfigError) Unwrap() error {
+	return e.err
+}
+
+func redactPW(connString string) string {
+	if strings.HasPrefix(connString, "postgres://") || strings.HasPrefix(connString, "postgresql://") {
+		if u, err := url.Parse(connString); err == nil {
+			return redactURL(u)
+		}
+	}
+	quotedDSN := regexp.MustCompile(`password='[^']*'`)
+	connString = quotedDSN.ReplaceAllLiteralString(connString, "password=xxxxx")
+	plainDSN := regexp.MustCompile(`password=[^ ]*`)
+	connString = plainDSN.ReplaceAllLiteralString(connString, "password=xxxxx")
+	brokenURL := regexp.MustCompile(`:[^:@]+?@`)
+	connString = brokenURL.ReplaceAllLiteralString(connString, ":xxxxxx@")
+	return connString
+}
+
+func redactURL(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	if _, pwSet := u.User.Password(); pwSet {
+		u.User = url.UserPassword(u.User.Username(), "xxxxx")
+	}
+	return u.String()
 }

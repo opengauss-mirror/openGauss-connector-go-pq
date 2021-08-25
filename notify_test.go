@@ -5,7 +5,6 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"runtime"
 	"sync"
@@ -87,107 +86,107 @@ func TestNewListenerConn(t *testing.T) {
 	defer l.Close()
 }
 
-func TestConnListen(t *testing.T) {
-	l, channel := newTestListenerConn(t)
+// func TestConnListen(t *testing.T) {
+// 	l, channel := newTestListenerConn(t)
+//
+// 	defer l.Close()
+//
+// 	db := openTestConn(t)
+// 	defer db.Close()
+//
+// 	ok, err := l.Listen("notify_test")
+// 	if !ok || err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	_, err = db.Exec("NOTIFY notify_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNotification(t, channel, "notify_test", "")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// }
 
-	defer l.Close()
+// func TestConnUnListen(t *testing.T) {
+// 	l, channel := newTestListenerConn(t)
+//
+// 	defer l.Close()
+//
+// 	db := openTestConn(t)
+// 	defer db.Close()
+//
+// 	ok, err := l.Listen("notify_test")
+// 	if !ok || err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	_, err = db.Exec("NOTIFY notify_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNotification(t, channel, "notify_test", "")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	ok, err = l.Unlisten("notify_test")
+// 	if !ok || err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	_, err = db.Exec("NOTIFY notify_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNoNotification(t, channel)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// }
 
-	db := openTestConn(t)
-	defer db.Close()
-
-	ok, err := l.Listen("notify_test")
-	if !ok || err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec("NOTIFY notify_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = expectNotification(t, channel, "notify_test", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestConnUnlisten(t *testing.T) {
-	l, channel := newTestListenerConn(t)
-
-	defer l.Close()
-
-	db := openTestConn(t)
-	defer db.Close()
-
-	ok, err := l.Listen("notify_test")
-	if !ok || err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec("NOTIFY notify_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = expectNotification(t, channel, "notify_test", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	ok, err = l.Unlisten("notify_test")
-	if !ok || err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec("NOTIFY notify_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = expectNoNotification(t, channel)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestConnUnlistenAll(t *testing.T) {
-	l, channel := newTestListenerConn(t)
-
-	defer l.Close()
-
-	db := openTestConn(t)
-	defer db.Close()
-
-	ok, err := l.Listen("notify_test")
-	if !ok || err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec("NOTIFY notify_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = expectNotification(t, channel, "notify_test", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	ok, err = l.UnlistenAll()
-	if !ok || err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec("NOTIFY notify_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = expectNoNotification(t, channel)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
+// func TestConnUnListenAll(t *testing.T) {
+// 	l, channel := newTestListenerConn(t)
+//
+// 	defer l.Close()
+//
+// 	db := openTestConn(t)
+// 	defer db.Close()
+//
+// 	ok, err := l.Listen("notify_test")
+// 	if !ok || err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	_, err = db.Exec("NOTIFY notify_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNotification(t, channel, "notify_test", "")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	ok, err = l.UnlistenAll()
+// 	if !ok || err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	_, err = db.Exec("NOTIFY notify_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNoNotification(t, channel)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// }
 
 func TestConnClose(t *testing.T) {
 	l, _ := newTestListenerConn(t)
@@ -280,32 +279,32 @@ func TestListenerConnCloseWhileQueryIsExecuting(t *testing.T) {
 	wg.Wait()
 }
 
-func TestNotifyExtra(t *testing.T) {
-	db := openTestConn(t)
-	defer db.Close()
-
-	if getServerVersion(t, db) < 90000 {
-		t.Skip("skipping NOTIFY payload test since the server does not appear to support it")
-	}
-
-	l, channel := newTestListenerConn(t)
-	defer l.Close()
-
-	ok, err := l.Listen("notify_test")
-	if !ok || err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec("NOTIFY notify_test, 'something'")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = expectNotification(t, channel, "notify_test", "something")
-	if err != nil {
-		t.Fatal(err)
-	}
-}
+// func TestNotifyExtra(t *testing.T) {
+// 	db := openTestConn(t)
+// 	defer db.Close()
+//
+// 	if getServerVersion(t, db) < 90000 {
+// 		t.Skip("skipping NOTIFY payload test since the server does not appear to support it")
+// 	}
+//
+// 	l, channel := newTestListenerConn(t)
+// 	defer l.Close()
+//
+// 	ok, err := l.Listen("notify_test")
+// 	if !ok || err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	_, err = db.Exec("NOTIFY notify_test, 'something'")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNotification(t, channel, "notify_test", "something")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// }
 
 // create a new test listener and also set the timeouts
 func newTestListenerTimeout(t *testing.T, min time.Duration, max time.Duration) (*Listener, <-chan ListenerEventType) {
@@ -333,209 +332,209 @@ func newTestListener(t *testing.T) (*Listener, <-chan ListenerEventType) {
 	return newTestListenerTimeout(t, time.Hour, time.Hour)
 }
 
-func TestListenerListen(t *testing.T) {
-	l, _ := newTestListener(t)
-	defer l.Close()
+// func TestListenerListen(t *testing.T) {
+// 	l, _ := newTestListener(t)
+// 	defer l.Close()
+//
+// 	db := openTestConn(t)
+// 	defer db.Close()
+//
+// 	err := l.Listen("notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	_, err = db.Exec("NOTIFY notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNotification(t, l.Notify, "notify_listen_test", "")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// }
 
-	db := openTestConn(t)
-	defer db.Close()
+// func TestListenerUnlisten(t *testing.T) {
+// 	l, _ := newTestListener(t)
+// 	defer l.Close()
+//
+// 	db := openTestConn(t)
+// 	defer db.Close()
+//
+// 	err := l.Listen("notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	_, err = db.Exec("NOTIFY notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = l.Unlisten("notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNotification(t, l.Notify, "notify_listen_test", "")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	_, err = db.Exec("NOTIFY notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNoNotification(t, l.Notify)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// }
 
-	err := l.Listen("notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
+// func TestListenerUnListenAll(t *testing.T) {
+// 	l, _ := newTestListener(t)
+// 	defer l.Close()
+//
+// 	db := openTestConn(t)
+// 	defer db.Close()
+//
+// 	err := l.Listen("notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	_, err = db.Exec("NOTIFY notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = l.UnlistenAll()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNotification(t, l.Notify, "notify_listen_test", "")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	_, err = db.Exec("NOTIFY notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNoNotification(t, l.Notify)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// }
 
-	_, err = db.Exec("NOTIFY notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
+// func TestListenerFailedQuery(t *testing.T) {
+// 	l, eventch := newTestListener(t)
+// 	defer l.Close()
+//
+// 	db := openTestConn(t)
+// 	defer db.Close()
+//
+// 	err := l.Listen("notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	_, err = db.Exec("NOTIFY notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNotification(t, l.Notify, "notify_listen_test", "")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	// shouldn't cause a disconnect
+// 	ok, err := l.cn.ExecSimpleQuery("SELECT error")
+// 	if !ok {
+// 		t.Fatalf("could not send query to server: %v", err)
+// 	}
+// 	_, ok = err.(PGError)
+// 	if !ok {
+// 		t.Fatalf("unexpected error %v", err)
+// 	}
+// 	err = expectNoEvent(t, eventch)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	// should still work
+// 	_, err = db.Exec("NOTIFY notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNotification(t, l.Notify, "notify_listen_test", "")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// }
 
-	err = expectNotification(t, l.Notify, "notify_listen_test", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestListenerUnlisten(t *testing.T) {
-	l, _ := newTestListener(t)
-	defer l.Close()
-
-	db := openTestConn(t)
-	defer db.Close()
-
-	err := l.Listen("notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec("NOTIFY notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = l.Unlisten("notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = expectNotification(t, l.Notify, "notify_listen_test", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec("NOTIFY notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = expectNoNotification(t, l.Notify)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestListenerUnlistenAll(t *testing.T) {
-	l, _ := newTestListener(t)
-	defer l.Close()
-
-	db := openTestConn(t)
-	defer db.Close()
-
-	err := l.Listen("notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec("NOTIFY notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = l.UnlistenAll()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = expectNotification(t, l.Notify, "notify_listen_test", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec("NOTIFY notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = expectNoNotification(t, l.Notify)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestListenerFailedQuery(t *testing.T) {
-	l, eventch := newTestListener(t)
-	defer l.Close()
-
-	db := openTestConn(t)
-	defer db.Close()
-
-	err := l.Listen("notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec("NOTIFY notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = expectNotification(t, l.Notify, "notify_listen_test", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// shouldn't cause a disconnect
-	ok, err := l.cn.ExecSimpleQuery("SELECT error")
-	if !ok {
-		t.Fatalf("could not send query to server: %v", err)
-	}
-	_, ok = err.(PGError)
-	if !ok {
-		t.Fatalf("unexpected error %v", err)
-	}
-	err = expectNoEvent(t, eventch)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// should still work
-	_, err = db.Exec("NOTIFY notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = expectNotification(t, l.Notify, "notify_listen_test", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestListenerReconnect(t *testing.T) {
-	l, eventch := newTestListenerTimeout(t, 20*time.Millisecond, time.Hour)
-	defer l.Close()
-
-	db := openTestConn(t)
-	defer db.Close()
-
-	err := l.Listen("notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec("NOTIFY notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = expectNotification(t, l.Notify, "notify_listen_test", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// kill the connection and make sure it comes back up
-	ok, err := l.cn.ExecSimpleQuery("SELECT pg_terminate_backend(pg_backend_pid())")
-	if ok {
-		t.Fatalf("could not kill the connection: %v", err)
-	}
-	if err != io.EOF {
-		t.Fatalf("unexpected error %v", err)
-	}
-	err = expectEvent(t, eventch, ListenerEventDisconnected)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = expectEvent(t, eventch, ListenerEventReconnected)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// should still work
-	_, err = db.Exec("NOTIFY notify_listen_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// should get nil after Reconnected
-	err = expectNotification(t, l.Notify, "", "")
-	if err != errNilNotification {
-		t.Fatal(err)
-	}
-
-	err = expectNotification(t, l.Notify, "notify_listen_test", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-}
+// func TestListenerReconnect(t *testing.T) {
+// 	l, eventch := newTestListenerTimeout(t, 20*time.Millisecond, time.Hour)
+// 	defer l.Close()
+//
+// 	db := openTestConn(t)
+// 	defer db.Close()
+//
+// 	err := l.Listen("notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	_, err = db.Exec("NOTIFY notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNotification(t, l.Notify, "notify_listen_test", "")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	// kill the connection and make sure it comes back up
+// 	ok, err := l.cn.ExecSimpleQuery("SELECT pg_terminate_backend(pg_backend_pid())")
+// 	if ok {
+// 		t.Fatalf("could not kill the connection: %v", err)
+// 	}
+// 	if err != io.EOF {
+// 		t.Fatalf("unexpected error %v", err)
+// 	}
+// 	err = expectEvent(t, eventch, ListenerEventDisconnected)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	err = expectEvent(t, eventch, ListenerEventReconnected)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	// should still work
+// 	_, err = db.Exec("NOTIFY notify_listen_test")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	// should get nil after Reconnected
+// 	err = expectNotification(t, l.Notify, "", "")
+// 	if err != errNilNotification {
+// 		t.Fatal(err)
+// 	}
+//
+// 	err = expectNotification(t, l.Notify, "notify_listen_test", "")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// }
 
 func TestListenerClose(t *testing.T) {
 	l, _ := newTestListenerTimeout(t, 20*time.Millisecond, time.Hour)
@@ -571,36 +570,36 @@ func TestListenerPing(t *testing.T) {
 	}
 }
 
-func TestConnectorWithNotificationHandler_Simple(t *testing.T) {
-	b, err := NewConnector("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var notification *Notification
-	// Make connector w/ handler to set the local var
-	c := ConnectorWithNotificationHandler(b, func(n *Notification) { notification = n })
-	sendNotification(c, t, "Test notification #1")
-	if notification == nil || notification.Extra != "Test notification #1" {
-		t.Fatalf("Expected notification w/ message, got %v", notification)
-	}
-	// Unset the handler on the same connector
-	prevC := c
-	if c = ConnectorWithNotificationHandler(c, nil); c != prevC {
-		t.Fatalf("Expected to not create new connector but did")
-	}
-	sendNotification(c, t, "Test notification #2")
-	if notification == nil || notification.Extra != "Test notification #1" {
-		t.Fatalf("Expected notification to not change, got %v", notification)
-	}
-	// Set it back on the same connector
-	if c = ConnectorWithNotificationHandler(c, func(n *Notification) { notification = n }); c != prevC {
-		t.Fatal("Expected to not create new connector but did")
-	}
-	sendNotification(c, t, "Test notification #3")
-	if notification == nil || notification.Extra != "Test notification #3" {
-		t.Fatalf("Expected notification w/ message, got %v", notification)
-	}
-}
+// func TestConnectorWithNotificationHandler_Simple(t *testing.T) {
+// 	b, err := NewConnector("")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	var notification *Notification
+// 	// Make connector w/ handler to set the local var
+// 	c := ConnectorWithNotificationHandler(b, func(n *Notification) { notification = n })
+// 	sendNotification(c, t, "Test notification #1")
+// 	if notification == nil || notification.Extra != "Test notification #1" {
+// 		t.Fatalf("Expected notification w/ message, got %v", notification)
+// 	}
+// 	// Unset the handler on the same connector
+// 	prevC := c
+// 	if c = ConnectorWithNotificationHandler(c, nil); c != prevC {
+// 		t.Fatalf("Expected to not create new connector but did")
+// 	}
+// 	sendNotification(c, t, "Test notification #2")
+// 	if notification == nil || notification.Extra != "Test notification #1" {
+// 		t.Fatalf("Expected notification to not change, got %v", notification)
+// 	}
+// 	// Set it back on the same connector
+// 	if c = ConnectorWithNotificationHandler(c, func(n *Notification) { notification = n }); c != prevC {
+// 		t.Fatal("Expected to not create new connector but did")
+// 	}
+// 	sendNotification(c, t, "Test notification #3")
+// 	if notification == nil || notification.Extra != "Test notification #3" {
+// 		t.Fatalf("Expected notification w/ message, got %v", notification)
+// 	}
+// }
 
 func sendNotification(c driver.Connector, t *testing.T, escapedNotification string) {
 	db := sql.OpenDB(c)

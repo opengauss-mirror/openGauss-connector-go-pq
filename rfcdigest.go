@@ -11,47 +11,6 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 )
 
-// import (
-
-// 	"fmt"
-// 	"hash"
-
-//
-// )
-
-// type derivedKeys struct {
-// 	ClientKey []byte
-// 	StoredKey []byte
-// 	ServerKey []byte
-// }
-// type KeyFactors struct {
-// 	Salt  string
-// 	Iters int
-// }
-
-// type StoredCredentials struct {
-// 	KeyFactors
-// 	StoredKey []byte
-// 	ServerKey []byte
-// }
-
-// type HashGeneratorFcn func() hash.Hash
-
-// var SHA1 HashGeneratorFcn = func() hash.Hash { return sha1.New() }
-// var SHA256 HashGeneratorFcn = func() hash.Hash { return sha256.New() }
-
-// func computeHash(hg HashGeneratorFcn, b []byte) []byte {
-// 	h := hg()
-// 	h.Write(b)
-// 	return h.Sum(nil)
-// }
-
-// func computeHMAC(hg HashGeneratorFcn, key, data []byte) []byte {
-// 	mac := hmac.New(hg, key)
-// 	mac.Write(data)
-// 	return mac.Sum(nil)
-// }
-
 func charToByte(c byte) byte {
 	return byte(strings.Index("0123456789ABCDEF", string(c)))
 }

@@ -1,3 +1,5 @@
+// Copyright © 2021 Bin Liu <bin.liu@enmotech.com>
+
 package pq
 
 import (
@@ -133,12 +135,9 @@ func (cn *conn) cancel(ctx context.Context) error {
 	// in this method cannot write to the same underlying data, which could
 	// cause a concurrent map write panic. This is necessary because cancel
 	// is called from a goroutine in watchCancel.
-	o := make(values)
-	for k, v := range cn.opts {
-		o[k] = v
-	}
 
-	c, err := dial(ctx, cn.dialer, o)
+	network, address := NetworkAddress(cn.fallbackConfig.Host, cn.fallbackConfig.Port)
+	c, err := cn.config.DialFunc(ctx, network, address)
 	if err != nil {
 		return err
 	}
@@ -151,7 +150,7 @@ func (cn *conn) cancel(ctx context.Context) error {
 			c:   c,
 			bad: bad,
 		}
-		err = can.ssl(o)
+		err = can.startTLS(cn.fallbackConfig.TLSConfig)
 		if err != nil {
 			return err
 		}

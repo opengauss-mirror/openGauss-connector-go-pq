@@ -58,34 +58,6 @@ func (n *NotificationHandlerConnector) Connect(ctx context.Context) (driver.Conn
 	return c, err
 }
 
-// ConnectorNotificationHandler returns the currently set notification handler, if any. If
-// the given connector is not a result of ConnectorWithNotificationHandler, nil is
-// returned.
-func ConnectorNotificationHandler(c driver.Connector) func(*Notification) {
-	if c, ok := c.(*NotificationHandlerConnector); ok {
-		return c.notificationHandler
-	}
-	return nil
-}
-
-// ConnectorWithNotificationHandler creates or sets the given handler for the given
-// connector. If the given connector is a result of calling this function
-// previously, it is simply set on the given connector and returned. Otherwise,
-// this returns a new connector wrapping the given one and setting the notification
-// handler. A nil notification handler may be used to unset it.
-//
-// The returned connector is intended to be used with database/sql.OpenDB.
-//
-// Note: Notification handlers are executed synchronously by pq meaning commands
-// won't continue to be processed until the handler returns.
-func ConnectorWithNotificationHandler(c driver.Connector, handler func(*Notification)) *NotificationHandlerConnector {
-	if c, ok := c.(*NotificationHandlerConnector); ok {
-		c.notificationHandler = handler
-		return c
-	}
-	return &NotificationHandlerConnector{Connector: c, notificationHandler: handler}
-}
-
 const (
 	connStateIdle int32 = iota
 	connStateExpectResponse

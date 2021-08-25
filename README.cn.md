@@ -31,6 +31,7 @@ alter system set password_encryption_type=0;
 ## 特性
 
 * 适配openGauss SHA256密码认证
+* 支持连接字符串多host定义
 * SSL
 * 处理`database/sql`坏连接
 * 正确扫描`time.Time`（即`timestamp[tz]`, `time[tz]`, `date`）
@@ -43,6 +44,23 @@ alter system set password_encryption_type=0;
 * 通知：`LISTEN`/`NOTIFY`
 * 支持pgpass
 * GSS（Kerberos）验证
+
+
+## Multiple Hosts
+
+示例[multi_ip](example/multi_ip/multi_ip.go)
+
+postgres 介绍文档[LIBPQ-MULTIPLE-HOSTS](https://www.postgresql.org/docs/10/libpq-connect.html#LIBPQ-MULTIPLE-HOSTS)
+
+- 支持同时定义主从地址,自动选择主库连接,当发生切换事自动连接新当主库.
+- 连接字符中target_session_attrs参数暂时只能定义read-write(默认配置),配置为read-only存在问题
+
+```
+postgres://gaussdb:secret@foo,bar,baz/mydb?sslmode=disable
+postgres://gaussdb:secret@foo:1,bar:2,baz:3/mydb?sslmode=disable
+user=gaussdb password=secret host=foo,bar,baz port=5432 dbname=mydb sslmode=disable
+user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb sslmode=disable
+```
 
 ## 示例
 
