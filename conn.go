@@ -32,6 +32,28 @@ var (
 	errNoLastInsertID  = errors.New("no LastInsertId available after the empty statement")
 )
 
+const (
+	AuthReqOk          = 0
+	AUTH_REQ_KRB4      = 1
+	AUTH_REQ_KRB5      = 2
+	AuthReqPassword    = 3
+	AUTH_REQ_CRYPT     = 4
+	AuthReqMd5         = 5
+	AUTH_REQ_SCM       = 6
+	AuthReqGss         = 7
+	AuthReqGssContinue = 8
+	AUTH_REQ_SSPI      = 9
+	AuthReqSha256      = 10
+	AuthReqMd5Sha256   = 11
+	AuthReqSm3         = 13
+
+	PlainPassword  = 0
+	Md5Password    = 1
+	Sha256Password = 2
+
+	Sm3Password = 3
+)
+
 type parameterStatus struct {
 	// server version in the same format as server_version_num, or 0 if
 	// unavailable
@@ -772,9 +794,9 @@ func (cn *conn) startup() {
 
 func (cn *conn) auth(r *readBuf) {
 	switch code := r.int32(); code {
-	case 0:
+	case AuthReqOk:
 		// OK
-	case 3:
+	case AuthReqPassword:
 		w := cn.writeBuf('p')
 		w.string(cn.config.Password)
 		cn.send(w)
@@ -787,7 +809,7 @@ func (cn *conn) auth(r *readBuf) {
 		if r.int32() != 0 {
 			errorf("unexpected authentication response: %q", t)
 		}
-	case 5:
+	case AuthReqMd5:
 		s := string(r.next(4))
 		w := cn.writeBuf('p')
 		w.string("md5" + md5s(md5s(cn.config.Password+cn.config.User)+s))
@@ -801,7 +823,7 @@ func (cn *conn) auth(r *readBuf) {
 		if r.int32() != 0 {
 			errorf("unexpected authentication response: %q", t)
 		}
-	case 7: // GSSAPI, startup
+	case AuthReqGss: // GSSAPI, startup
 		if newGss == nil {
 			errorf("kerberos error: no GSSAPI provider registered (import gitee.com/opengauss/openGauss-connector-go-pq/auth/kerberos if you need Kerberos support)")
 		}
@@ -835,7 +857,8 @@ func (cn *conn) auth(r *readBuf) {
 
 		// Store for GSSAPI continue message
 		cn.gss = cli
-	case 8: // GSSAPI continue
+
+	case AuthReqGssContinue: // GSSAPI continue
 
 		if cn.gss == nil {
 			errorf("GSSAPI protocol error")
@@ -850,18 +873,71 @@ func (cn *conn) auth(r *readBuf) {
 			cn.send(w)
 		}
 
-	case 10:
+		// Errors fall through and read the more detailed message
+		// from the server..
+
+	// case 10:
+	// 	sc := scram.NewClient(sha256.New, o["user"], o["password"])
+	// 	sc.Step(nil)
+	// 	if sc.Err() != nil {
+	// 		errorf("SCRAM-SHA-256 error: %s", sc.Err().Error())
+	// 	}
+	// 	scOut := sc.Out()
+	//
+	// 	w := cn.writeBuf('p')
+	// 	w.string("SCRAM-SHA-256")
+	// 	w.int32(len(scOut))
+	// 	w.bytes(scOut)
+	// 	cn.send(w)
+	//
+	// 	t, r := cn.recv()
+	// 	if t != 'R' {
+	// 		errorf("unexpected password response: %q", t)
+	// 	}
+	//
+	// 	if r.int32() != 11 {
+	// 		errorf("unexpected authentication response: %q", t)
+	// 	}
+	//
+	// 	nextStep := r.next(len(*r))
+	// 	sc.Step(nextStep)
+	// 	if sc.Err() != nil {
+	// 		errorf("SCRAM-SHA-256 error: %s", sc.Err().Error())
+	// 	}
+	//
+	// 	scOut = sc.Out()
+	// 	w = cn.writeBuf('p')
+	// 	w.bytes(scOut)
+	// 	cn.send(w)
+	//
+	// 	t, r = cn.recv()
+	// 	if t != 'R' {
+	// 		errorf("unexpected password response: %q", t)
+	// 	}
+	//
+	// 	if r.int32() != 12 {
+	// 		errorf("unexpected authentication response: %q", t)
+	// 	}
+	//
+	// 	nextStep = r.next(len(*r))
+	// 	sc.Step(nextStep)
+	// 	if sc.Err() != nil {
+	// 		errorf("SCRAM-SHA-256 error: %s", sc.Err().Error())
+	// 	}
+
+	case AuthReqSha256:
+
 		// 这里在openGauss为sha256加密办法，主要代码流程来自jdbc相关实现
 		passwordStoredMethod := r.int32()
 		digest := ""
 		if len(cn.config.Password) == 0 {
 			errorf("The server requested password-based authentication, but no password was provided.")
 		}
-		if passwordStoredMethod == 0 || passwordStoredMethod == 2 {
+		if passwordStoredMethod == PlainPassword || passwordStoredMethod == Sha256Password {
 			random64code := string(r.next(64))
 			token := string(r.next(8))
 			serverIteration := r.int32()
-			result := RFC5802Algorithm(cn.config.Password, random64code, token, "", serverIteration)
+			result := RFC5802Algorithm(cn.config.Password, random64code, token, "", serverIteration, "sha256")
 			if len(result) == 0 {
 				errorf("Invalid username/password,login denied.")
 			}
@@ -883,7 +959,7 @@ func (cn *conn) auth(r *readBuf) {
 				errorf("unexpected authentication response: %q", t)
 			}
 			// return
-		} else if passwordStoredMethod == 1 {
+		} else if passwordStoredMethod == Md5Password {
 			s := string(r.next(4))
 			digest = "md5" + md5s(md5s(cn.config.Password+cn.config.User)+s)
 			w := cn.writeBuf('p')
@@ -900,12 +976,11 @@ func (cn *conn) auth(r *readBuf) {
 				errorf("unexpected authentication response: %q", t)
 			}
 		} else {
-			errorf("The  password-stored method is not supported ,must be plain , md5 or sha256.")
+			errorf("The  password-stored method is not supported ,must be plain, md5 or sha256.")
 		}
 
 	// AUTH_REQ_MD5_SHA256
-	case 11:
-
+	case AuthReqMd5Sha256:
 		random64code := string(r.next(64))
 		md5Salt := r.next(4)
 		result := Md5Sha256encode(cn.config.Password, random64code, md5Salt)
@@ -926,7 +1001,38 @@ func (cn *conn) auth(r *readBuf) {
 		if r.int32() != 0 {
 			errorf("unexpected authentication response: %q", t)
 		}
+	case AuthReqSm3: // sm3
+		passwordStoredMethod := r.int32()
+		if passwordStoredMethod == Sm3Password {
+			random64code := string(r.next(64))
+			token := string(r.next(8))
+			serverIteration := r.int32()
 
+			result := RFC5802Algorithm(cn.config.Password, random64code, token, "", serverIteration, "sm3")
+			if len(result) == 0 {
+				errorf("Invalid username/password,login denied.")
+			}
+
+			w := cn.writeBuf('p')
+			w.buf = []byte("p")
+			w.pos = 1
+			w.int32(4 + len(result) + 1)
+			w.bytes(result)
+			w.byte(0)
+			cn.send(w)
+
+			t, r := cn.recv()
+
+			if t != 'R' {
+				errorf("unexpected password response: %q", t)
+			}
+
+			if r.int32() != 0 {
+				errorf("unexpected authentication response: %q", t)
+			}
+		} else {
+			errorf("The password-stored method is not supported ,must be sm3.")
+		}
 	default:
 		errorf("unknown authentication response: %d", code)
 	}

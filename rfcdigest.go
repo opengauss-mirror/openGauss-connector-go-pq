@@ -8,6 +8,7 @@ import (
 
 	"crypto/sha256"
 
+	"github.com/tjfoc/gmsm/sm3"
 	"golang.org/x/crypto/pbkdf2"
 )
 
@@ -69,6 +70,13 @@ func getSha256(message []byte) []byte {
 	return hash.Sum(nil)
 }
 
+func getSm3(message []byte) []byte {
+	hash := sm3.New()
+	hash.Write(message)
+
+	return hash.Sum(nil)
+}
+
 func XorBetweenPassword(password1 []byte, password2 []byte, length int) []byte {
 	array := make([]byte, length)
 	for i := 0; i < length; i++ {
@@ -124,11 +132,17 @@ RFC5802Algorithm
        return result;
    }
 */
-func RFC5802Algorithm(password string, random64code string, token string, serverSignature string, serverIteration int) []byte {
+func RFC5802Algorithm(password string, random64code string, token string, serverSignature string, serverIteration int, method string) []byte {
 	k := generateKFromPBKDF2(password, random64code, serverIteration)
 	serverKey := getKeyFromHmac(k, []byte("Sever Key"))
 	clientKey := getKeyFromHmac(k, []byte("Client Key"))
-	storedKey := getSha256(clientKey)
+	var storedKey []byte
+
+	if strings.EqualFold(method, "sha256") {
+		storedKey = getSha256(clientKey)
+	} else if strings.EqualFold(method, "sm3") {
+		storedKey = getSm3(clientKey)
+	}
 	tokenByte := hexStringToBytes(token)
 	clientSignature := getKeyFromHmac(serverKey, tokenByte)
 	if serverSignature != "" && serverSignature != bytesToHexString(clientSignature) {
