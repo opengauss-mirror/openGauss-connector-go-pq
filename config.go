@@ -348,7 +348,9 @@ func ParseConfig(connString string) (*Config, error) {
 		}
 	}
 
-	if settings["target_session_attrs"] == "read-write" || settings["target_session_attrs"] == "read-only" {
+	if strings.EqualFold(settings["target_session_attrs"], "any") {
+		config.targetSessionAttrs = ""
+	} else if strings.EqualFold(settings["target_session_attrs"], "read-write") || strings.EqualFold(settings["target_session_attrs"], "read-only") {
 		// config.ValidateConnect = ValidateConnectTargetSessionAttrsReadWrite
 		config.targetSessionAttrs = settings["target_session_attrs"]
 	} else {
