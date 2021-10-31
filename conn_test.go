@@ -1760,13 +1760,18 @@ func TestCopyInStmtAffectedRows(t *testing.T) {
 // 		wantErr bool
 // 	}{
 // 		{
-// 			name:    "user_existed",
-// 			dsn:     "host=localhost user=mogdb_usr password=mogdb@1236 port=5433 dbname=postgres sslmode=disable",
+// 			name:    "normal",
+// 			dsn:     "host=localhost user=mogdb_usr password=Mogdb@123 port=5433 dbname=postgres sslmode=disable",
+// 			wantErr: false,
+// 		},
+// 		{
+// 			name:    "no_sslmode",
+// 			dsn:     "host=localhost user=mogdb_usr password=Mogdb@123 port=5433 dbname=postgres",
 // 			wantErr: false,
 // 		},
 // 		{
 // 			name:    "user_password_error",
-// 			dsn:     "host=localhost user=mogdb_usr password=mogdb@12356777 port=5433 dbname=postgres sslmode=disable",
+// 			dsn:     "host=localhost user=mogdb_usr password=Mogdb@123456 port=5433 dbname=postgres sslmode=disable",
 // 			wantErr: true,
 // 		},
 // 		{
@@ -1784,17 +1789,17 @@ func TestCopyInStmtAffectedRows(t *testing.T) {
 // 	for _, tt := range tests {
 // 		t.Run(tt.name, func(t *testing.T) {
 // 			db, err := openTestConnConninfo(tt.dsn)
-// 			// if (err != nil) != tt.wantErr {
-// 			// 	t.Errorf("openTestConnConninfo() error = %v, wantErr %v", err, tt.wantErr)
-// 			// 	return
-// 			// }
+// 			err = db.Ping();
+// 			if (err != nil) != tt.wantErr {
+// 				t.Errorf("openTestConnConninfo() error = %v, wantErr %v", err, tt.wantErr)
+// 				return
+// 			}
 // 			var a string
 // 			err = db.QueryRow("select 1").Scan(&a)
 // 			if (err != nil) != tt.wantErr {
 // 				t.Errorf("QueryRow() error = %v, wantErr %v", err, tt.wantErr)
 // 				return
 // 			}
-// 			fmt.Println(a)
 // 		})
 // 	}
 //
