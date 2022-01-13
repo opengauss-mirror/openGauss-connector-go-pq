@@ -873,58 +873,6 @@ func (cn *conn) auth(r *readBuf) {
 			cn.send(w)
 		}
 
-		// Errors fall through and read the more detailed message
-		// from the server..
-
-	// case 10:
-	// 	sc := scram.NewClient(sha256.New, o["user"], o["password"])
-	// 	sc.Step(nil)
-	// 	if sc.Err() != nil {
-	// 		errorf("SCRAM-SHA-256 error: %s", sc.Err().Error())
-	// 	}
-	// 	scOut := sc.Out()
-	//
-	// 	w := cn.writeBuf('p')
-	// 	w.string("SCRAM-SHA-256")
-	// 	w.int32(len(scOut))
-	// 	w.bytes(scOut)
-	// 	cn.send(w)
-	//
-	// 	t, r := cn.recv()
-	// 	if t != 'R' {
-	// 		errorf("unexpected password response: %q", t)
-	// 	}
-	//
-	// 	if r.int32() != 11 {
-	// 		errorf("unexpected authentication response: %q", t)
-	// 	}
-	//
-	// 	nextStep := r.next(len(*r))
-	// 	sc.Step(nextStep)
-	// 	if sc.Err() != nil {
-	// 		errorf("SCRAM-SHA-256 error: %s", sc.Err().Error())
-	// 	}
-	//
-	// 	scOut = sc.Out()
-	// 	w = cn.writeBuf('p')
-	// 	w.bytes(scOut)
-	// 	cn.send(w)
-	//
-	// 	t, r = cn.recv()
-	// 	if t != 'R' {
-	// 		errorf("unexpected password response: %q", t)
-	// 	}
-	//
-	// 	if r.int32() != 12 {
-	// 		errorf("unexpected authentication response: %q", t)
-	// 	}
-	//
-	// 	nextStep = r.next(len(*r))
-	// 	sc.Step(nextStep)
-	// 	if sc.Err() != nil {
-	// 		errorf("SCRAM-SHA-256 error: %s", sc.Err().Error())
-	// 	}
-
 	case AuthReqSha256:
 
 		// 这里在openGauss为sha256加密办法，主要代码流程来自jdbc相关实现
