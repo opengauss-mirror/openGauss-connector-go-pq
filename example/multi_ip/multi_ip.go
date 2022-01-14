@@ -29,8 +29,8 @@ DSN="user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=my
 )
 
 func main() {
-	// os.Setenv("DSN","postgres://dbuser_monitor:Mon@1234@127.0.0.1:1112,127.0.0.1:1111/postgres?" +
-	// 	"sslmode=disable&loggerLevel=debug&target_session_attrs=read-only")
+	// os.Setenv("DSN", "postgres://mogdb:mtkOP@123@127.0.0.1:5436,127.0.0.1:1111/postgres?"+
+	// 	"sslmode=disable&loggerLevel=debug")
 	connStr := os.Getenv("DSN")
 	if connStr == "" {
 		fmt.Println("please define the env DSN. example:\n" + dsnExample)
@@ -75,20 +75,21 @@ func getNodeName(db *sql.DB) error {
 	// 	return err
 	// }
 	// defer tx.Commit()
-	var nodeName, sysdate string
+	var sysdate string
 	var pgIsInRecovery bool
-	err = db.QueryRow("select sysdate,node_name,pg_is_in_recovery() from dbe_perf.global_instance_time limit 1 ").
-		Scan(&sysdate, &nodeName, &pgIsInRecovery)
+	var nodeName string
+	err = db.QueryRow("select sysdate,pg_is_in_recovery();").
+		Scan(&sysdate, &pgIsInRecovery)
 	if err != nil {
 		return err
 	}
 	var channel string
 
-	err = db.QueryRow("select channel from pg_stat_get_wal_senders() limit 1 ").
-		Scan(&channel)
+	// err = db.QueryRow("select channel from pg_stat_get_wal_senders() limit 1 ").
+	// 	Scan(&channel)
 	fmt.Println(sysdate, nodeName, pgIsInRecovery, channel)
-	if err != nil {
-		return err
-	}
+	// if err != nil {
+	// 	return err
+	// }
 	return nil
 }

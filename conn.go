@@ -779,13 +779,16 @@ func (cn *conn) startup() {
 			cn.auth(r)
 		case 'Z':
 			cn.processReadyForQuery(r)
-			if found, err := cn.ValidateConnect(); err != nil {
-				cn.c.Close()
-				panic(err)
-			} else if found {
-				return
+			if cn.config.ValidateConnect != nil {
+				err := cn.config.ValidateConnect(cn)
+				if err != nil {
+					cn.c.Close()
+					panic(err)
+				} else {
+					return
+				}
 			}
-			errorf("ValidateConnect failed")
+			return
 		default:
 			errorf("unknown response for startup: %q", t)
 		}
@@ -984,43 +987,6 @@ func (cn *conn) auth(r *readBuf) {
 	default:
 		errorf("unknown authentication response: %d", code)
 	}
-}
-
-func (cn *conn) ValidateConnect() (bool, error) {
-	if cn.config.targetSessionAttrs == "" {
-		return true, nil
-	}
-	sqlText := "show transaction_read_only"
-
-	cn.log(context.Background(), LogLevelDebug, "Check server is transaction_read_only ?", map[string]interface{}{"sql": sqlText,
-		"host": cn.config.Host, "port": cn.config.Port, "target_session_attrs": cn.config.targetSessionAttrs})
-	inReRows, err := cn.query(sqlText, nil)
-	if err != nil {
-		cn.log(context.Background(), LogLevelDebug, "err:"+err.Error(), map[string]interface{}{})
-		return false, err
-	}
-	defer inReRows.Close()
-	var dbTranReadOnly string
-	lastCols := []driver.Value{&dbTranReadOnly}
-	err = inReRows.Next(lastCols)
-	if err != nil {
-		cn.log(context.Background(), LogLevelDebug, "err:"+err.Error(), map[string]interface{}{})
-		return false, err
-	}
-	readOnly := lastCols[0].(string)
-	cn.log(context.Background(), LogLevelDebug, "Check server is readOnly ?", map[string]interface{}{"readOnly": readOnly,
-		"host": cn.config.Host, "port": cn.config.Port})
-
-	if strings.EqualFold(cn.config.targetSessionAttrs, targetSessionAttrsReadWrite) &&
-		strings.EqualFold(readOnly, "off") {
-		return true, nil
-	} else if strings.EqualFold(cn.config.targetSessionAttrs, targetSessionAttrsReadOnly) &&
-		strings.EqualFold(readOnly, "on") {
-		return true, nil
-	} else {
-		return false, nil
-	}
-
 }
 
 type format int
