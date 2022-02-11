@@ -132,8 +132,8 @@ func (rs *rows) Next(dest []driver.Value) (err error) {
 	}
 
 	conn := rs.cn
-	if conn.getBad() {
-		return driver.ErrBadConn
+	if err := conn.err.getForNext(); err != nil {
+		return err
 	}
 	defer conn.errRecover(&err)
 
@@ -157,7 +157,7 @@ func (rs *rows) Next(dest []driver.Value) (err error) {
 		case 'D':
 			n := rs.rb.int16()
 			if err != nil {
-				conn.setBad()
+				conn.err.set(driver.ErrBadConn)
 				errorf("unexpected DataRow after error %s", err)
 			}
 			if n < len(dest) {

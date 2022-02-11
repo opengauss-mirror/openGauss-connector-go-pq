@@ -6,7 +6,6 @@ import (
 	"context"
 	"database/sql/driver"
 	"errors"
-	"fmt"
 	"strings"
 )
 
@@ -81,7 +80,6 @@ func validateConnectTargetSessionAttrsRecovery(cn *conn, expectedIsRecovery bool
 		return false, err
 	}
 	pgIsRecovery := lastCols[0].(bool)
-	fmt.Println(pgIsRecovery, expectedIsRecovery)
 	cn.log(context.Background(), LogLevelDebug, "Check server is pg_is_in_recovery ?", map[string]interface{}{"pgIsRecovery": pgIsRecovery,
 		"host": cn.config.Host, "port": cn.config.Port})
 	if expectedIsRecovery == pgIsRecovery {
