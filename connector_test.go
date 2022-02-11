@@ -10,7 +10,10 @@ import (
 )
 
 func TestNewConnector_WorksWithOpenDB(t *testing.T) {
-	name := ""
+	name, err := getTestDsn()
+	if err != nil {
+		t.Fatal(err)
+	}
 	c, err := NewConnector(name)
 	if err != nil {
 		t.Fatal(err)
@@ -27,7 +30,10 @@ func TestNewConnector_WorksWithOpenDB(t *testing.T) {
 }
 
 func TestNewConnector_Connect(t *testing.T) {
-	name := ""
+	name, err := getTestDsn()
+	if err != nil {
+		t.Fatal(err)
+	}
 	c, err := NewConnector(name)
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +53,10 @@ func TestNewConnector_Connect(t *testing.T) {
 }
 
 func TestNewConnector_Driver(t *testing.T) {
-	name := ""
+	name, err := getTestDsn()
+	if err != nil {
+		t.Fatal(err)
+	}
 	c, err := NewConnector(name)
 	if err != nil {
 		t.Fatal(err)

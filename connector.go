@@ -12,11 +12,6 @@ import (
 	"time"
 )
 
-const (
-	targetSessionAttrsReadWrite = "read-write"
-	targetSessionAttrsReadOnly  = "read-only"
-)
-
 // Compile time validation that our types implement the expected interfaces
 var (
 	_ driver.Driver = Driver{}
@@ -109,6 +104,16 @@ func NewConnector(dsn string) (*Connector, error) {
 	if err != nil {
 		return nil, err
 	}
+	return newConnector(config)
+}
+
+// NewConnectorConfig establishes a connection to a openGauss server using config.
+// config must have been constructed with ParseConfig.
+func NewConnectorConfig(config *Config) (*Connector, error) {
+	return newConnector(config)
+}
+
+func newConnector(config *Config) (*Connector, error) {
 	return &Connector{dialer: defaultDialer{}, config: config}, nil
 }
 
