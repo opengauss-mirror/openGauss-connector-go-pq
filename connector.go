@@ -214,7 +214,7 @@ func (c *Connector) connectFallbackConfig(ctx context.Context, config *Config, f
 		fallbackConfig: fallbackConfig,
 	}
 
-	cn.log(ctx, LogLevelInfo, "Dialing server", map[string]interface{}{"host": fallbackConfig.Host, "port": fallbackConfig.Port})
+	cn.log(ctx, LogLevelInfo, "dialing server", map[string]interface{}{"host": fallbackConfig.Host, "port": fallbackConfig.Port})
 	network, address := NetworkAddress(fallbackConfig.Host, fallbackConfig.Port)
 	cn.c, err = config.DialFunc(ctx, network, address)
 	if err != nil {

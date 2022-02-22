@@ -494,11 +494,12 @@ func (cn *conn) errRecover(err *error) {
 		cn.setBad()
 		panic(v)
 	case *Error:
-		if v.Fatal() {
-			*err = driver.ErrBadConn
-		} else {
-			*err = v
-		}
+		// if v.Fatal() {
+		// 	*err = driver.ErrBadConn
+		// } else {
+		// 	*err = v
+		// }
+		*err = v
 	case *net.OpError:
 		cn.setBad()
 		*err = v

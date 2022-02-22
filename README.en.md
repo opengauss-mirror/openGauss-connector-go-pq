@@ -24,7 +24,7 @@ We still prefer to use a more secure encryption method like sha256, so the modif
 
 ## Features
 
-* Adapt openGauss SHA256 password authentication
+* Adapt openGauss SHA256/SM3 password authentication
 * Support for multiple host defined connections
 * SSL
 * Handles bad connections for `database/sql`

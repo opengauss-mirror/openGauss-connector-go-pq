@@ -48,8 +48,8 @@ func testConninfo(conninfo string) string {
 	return conninfo
 }
 
-func openTestConnConninfo(conninfo string) (*sql.DB, error) {
-	return sql.Open("opengauss", testConninfo(conninfo))
+func openTestConnConninfo(connInfo string) (*sql.DB, error) {
+	return sql.Open("opengauss", testConninfo(connInfo))
 }
 
 func openTestConn(t Fatalistic) *sql.DB {

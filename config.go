@@ -39,7 +39,8 @@ type Config struct {
 	// ValidateConnect is called during a connection attempt after a successful authentication with the PostgreSQL server.
 	// It can be used to validate that the server is acceptable. If this returns an error the connection is closed and the next
 	// fallback config is tried. This allows implementing high availability behavior such as libpq does with target_session_attrs.
-	// ValidateConnect ValidateConnectFunc
+
+	ValidateConnect ValidateConnectFunc
 
 	// AfterConnect is called after ValidateConnect. It can be used to set up the connection (e.g. Set session variables
 	// or prepare statements). If this returns an error the connection attempt fails.
@@ -348,13 +349,24 @@ func ParseConfig(connString string) (*Config, error) {
 		}
 	}
 
-	if settings["target_session_attrs"] == "read-write" || settings["target_session_attrs"] == "read-only" {
-		// config.ValidateConnect = ValidateConnectTargetSessionAttrsReadWrite
-		config.targetSessionAttrs = settings["target_session_attrs"]
-	} else {
-		return nil, &parseConfigError{connString: connString, msg: fmt.Sprintf("unknown target_session_attrs value: %v", settings["target_session_attrs"])}
+	switch tsa := settings["target_session_attrs"]; tsa {
+	case "read-write":
+		config.ValidateConnect = ValidateConnectTargetSessionAttrsReadWrite
+		config.targetSessionAttrs = tsa
+	case "read-only":
+		config.ValidateConnect = ValidateConnectTargetSessionAttrsReadOnly
+		config.targetSessionAttrs = tsa
+	case "primary":
+		config.ValidateConnect = ValidateConnectTargetSessionAttrsPrimary
+		config.targetSessionAttrs = tsa
+	case "standby":
+		config.ValidateConnect = ValidateConnectTargetSessionAttrsStandby
+		config.targetSessionAttrs = tsa
+	case "any", "prefer-standby":
+		// do nothing
+	default:
+		return nil, &parseConfigError{connString: connString, msg: fmt.Sprintf("unknown target_session_attrs value: %v", tsa)}
 	}
-
 	return config, nil
 }
 

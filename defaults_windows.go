@@ -31,7 +31,7 @@ func defaultSettings() map[string]string {
 		settings["servicefile"] = filepath.Join(user.HomeDir, ".pg_service.conf")
 	}
 
-	settings["target_session_attrs"] = targetSessionAttrsReadWrite
+	settings["target_session_attrs"] = "any"
 
 	settings["min_read_buffer_size"] = "8192"
 

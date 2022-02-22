@@ -30,7 +30,7 @@ alter system set password_encryption_type=0;
 
 ## 特性
 
-* 适配openGauss SHA256密码认证
+* 适配openGauss SHA256/SM3 密码认证
 * 支持连接字符串多host定义
 * SSL
 * 处理`database/sql`坏连接

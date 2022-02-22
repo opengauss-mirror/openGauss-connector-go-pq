@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// Implement the "QueryerContext" interface
+// QueryContext Implement the "QueryerContext" interface
 func (cn *conn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	list := make([]driver.Value, len(args))
 	for i, nv := range args {
@@ -31,7 +31,7 @@ func (cn *conn) QueryContext(ctx context.Context, query string, args []driver.Na
 	return r, nil
 }
 
-// Implement the "ExecerContext" interface
+// ExecContext Implement the "ExecerContext" interface
 func (cn *conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	list := make([]driver.Value, len(args))
 	for i, nv := range args {
@@ -45,7 +45,7 @@ func (cn *conn) ExecContext(ctx context.Context, query string, args []driver.Nam
 	return cn.Exec(query, list)
 }
 
-// Implement the "ConnBeginTx" interface
+// BeginTx Implement the "ConnBeginTx" interface
 func (cn *conn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
 	var mode string
 
