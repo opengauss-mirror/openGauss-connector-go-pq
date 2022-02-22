@@ -6,12 +6,24 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 
 	"gitee.com/opengauss/openGauss-connector-go-pq"
 )
 
+func getTestDsn() (string, error) {
+	dsn := os.Getenv("TEST_CONN_STRING")
+	if dsn == "" {
+		return "", fmt.Errorf("not define TEST_CONN_STRING env")
+	}
+	return dsn, nil
+}
+
 func ExampleConnectorWithNoticeHandler() {
-	name := ""
+	name, err := getTestDsn()
+	if err != nil {
+		log.Fatal(err)
+	}
 	// Base connector to wrap
 	base, err := pq.NewConnector(name)
 	if err != nil {

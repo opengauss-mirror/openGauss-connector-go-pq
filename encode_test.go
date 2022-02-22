@@ -122,7 +122,12 @@ func TestParseTsErrors(t *testing.T) {
 // Now test that sending the value into the database and parsing it back
 // returns the same time.Time value.
 func TestEncodeAndParseTs(t *testing.T) {
-	db, err := openTestConnConninfo("timezone='Etc/UTC'")
+	config, err := genTestConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.RuntimeParams["timezone"] = "Etc/UTC"
+	db, err := openTestConnConfig(config)
 	if err != nil {
 		t.Fatal(err)
 	}

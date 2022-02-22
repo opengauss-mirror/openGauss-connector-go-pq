@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/user"
 	"runtime"
@@ -16,7 +17,6 @@ import (
 )
 
 func TestParseConfig(t *testing.T) {
-	t.Parallel()
 
 	var osUserName string
 	osUser, err := user.Current()
@@ -569,12 +569,14 @@ func TestParseConfig(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		config, err := ParseConfig(tt.connString)
-		if !assert.Nilf(t, err, "Test %d (%s)", i, tt.name) {
-			continue
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			config, err := ParseConfig(tt.connString)
+			if !assert.Nilf(t, err, "Test %d (%s)", i, tt.name) {
+				return
+			}
+			assertConfigsEqual(t, tt.config, config, fmt.Sprintf("Test %d (%s)", i, tt.name))
+		})
 
-		assertConfigsEqual(t, tt.config, config, fmt.Sprintf("Test %d (%s)", i, tt.name))
 	}
 }
 
@@ -793,7 +795,7 @@ func TestParseConfigReadsPgPassfile(t *testing.T) {
 }
 
 func TestParseConfigReadsPgServiceFile(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 
 	tf, err := ioutil.TempFile("", "")
 	require.NoError(t, err)
@@ -897,4 +899,20 @@ func TestParseConfigExtractsMinReadBufferSize(t *testing.T) {
 
 	// The buffer size is internal so there isn't much that can be done to test it other than see that the runtime param
 	// was removed.
+}
+
+func TestParseConfigCustomTls(t *testing.T) {
+	tlsConfig := &tls.Config{
+		ServerName: "pq.example.com",
+	}
+	err := RegisterTLSConfig("custom", tlsConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+	connStr := "host=pq.example.com port=5432 user=user1 dbname=pqgotest password=pqgotest sslmode=custom"
+	config, err := ParseConfig(connStr)
+	if err != nil {
+		t.Fatal()
+	}
+	assert.Equalf(t, tlsConfig, config.TLSConfig, "Custom Tls")
 }
