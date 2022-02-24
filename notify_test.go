@@ -5,7 +5,6 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"os"
 	"runtime"
 	"sync"
 	"testing"
@@ -60,19 +59,12 @@ func expectNoEvent(t *testing.T, eventch <-chan ListenerEventType) error {
 }
 
 func newTestListenerConn(t *testing.T) (*ListenerConn, <-chan *Notification) {
-	datname := os.Getenv("PGDATABASE")
-	sslmode := os.Getenv("PGSSLMODE")
-
-	if datname == "" {
-		os.Setenv("PGDATABASE", "pqgotest")
+	name, err := getTestDsn()
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	if sslmode == "" {
-		os.Setenv("PGSSLMODE", "disable")
-	}
-
 	notificationChan := make(chan *Notification)
-	l, err := NewListenerConn("", notificationChan)
+	l, err := NewListenerConn(name, notificationChan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,20 +300,23 @@ func TestListenerConnCloseWhileQueryIsExecuting(t *testing.T) {
 
 // create a new test listener and also set the timeouts
 func newTestListenerTimeout(t *testing.T, min time.Duration, max time.Duration) (*Listener, <-chan ListenerEventType) {
-	datname := os.Getenv("PGDATABASE")
-	sslmode := os.Getenv("PGSSLMODE")
-
-	if datname == "" {
-		os.Setenv("PGDATABASE", "pqgotest")
+	// datname := os.Getenv("PGDATABASE")
+	// sslmode := os.Getenv("PGSSLMODE")
+	//
+	// if datname == "" {
+	// 	os.Setenv("PGDATABASE", "pqgotest")
+	// }
+	//
+	// if sslmode == "" {
+	// 	os.Setenv("PGSSLMODE", "disable")
+	// }
+	name, err := getTestDsn()
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	if sslmode == "" {
-		os.Setenv("PGSSLMODE", "disable")
-	}
-
 	eventch := make(chan ListenerEventType, 16)
-	l := NewListener("", min, max, func(t ListenerEventType, err error) { eventch <- t })
-	err := expectEvent(t, eventch, ListenerEventConnected)
+	l := NewListener(name, min, max, func(t ListenerEventType, err error) { eventch <- t })
+	err = expectEvent(t, eventch, ListenerEventConnected)
 	if err != nil {
 		t.Fatal(err)
 	}

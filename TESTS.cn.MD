@@ -30,5 +30,5 @@ enmotech/opengauss:latest
 运行测试：
 
 ```
-PGHOST=localhost PGPORT=5433 PGUSER=sha256 PGPASSWORD=sha256@abc123 PGSSLMODE=disable PGDATABASE=postgres go test
+TEST_CONN_STRING=postgresql://gaussdb:Test@123@localhost:5432/postgres?sslmode=disable go test
 ```

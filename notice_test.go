@@ -9,7 +9,11 @@ import (
 )
 
 func TestConnectorWithNoticeHandler_Simple(t *testing.T) {
-	b, err := NewConnector("")
+	name, err := getTestDsn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := NewConnector(name)
 	if err != nil {
 		t.Fatal(err)
 	}

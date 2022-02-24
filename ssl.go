@@ -3,12 +3,191 @@ package pq
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
+	"sync"
 )
+
+// configTLS uses libpq's TLS parameters to construct  []*tls.Config. It is
+// necessary to allow returning multiple TLS configs as sslmode "allow" and
+// "prefer" allow fallback.
+func configTLS(settings map[string]string) ([]*tls.Config, error) {
+	host := settings["host"]
+	sslmode := settings["sslmode"]
+	sslrootcert := settings["sslrootcert"]
+	sslcert := settings["sslcert"]
+	sslkey := settings["sslkey"]
+
+	// Match libpq default behavior
+	if sslmode == "" {
+		sslmode = "prefer"
+	}
+	tlsConfig := &tls.Config{}
+
+	switch sslmode {
+	case "disable":
+		return []*tls.Config{nil}, nil
+	case "allow", "prefer":
+		tlsConfig.InsecureSkipVerify = true
+	case "require":
+		// According to PostgreSQL documentation, if a root CA file exists,
+		// the behavior of sslmode=require should be the same as that of verify-ca
+		//
+		// See https://www.postgresql.org/docs/12/libpq-ssl.html
+		if sslrootcert != "" {
+			goto nextCase
+		}
+		tlsConfig.InsecureSkipVerify = true
+		break
+	nextCase:
+		fallthrough
+	case "verify-ca":
+		// Don't perform the default certificate verification because it
+		// will verify the hostname. Instead, verify the server's
+		// certificate chain ourselves in VerifyPeerCertificate and
+		// ignore the server name. This emulates libpq's verify-ca
+		// behavior.
+		//
+		// See https://github.com/golang/go/issues/21971#issuecomment-332693931
+		// and https://pkg.go.dev/crypto/tls?tab=doc#example-Config-VerifyPeerCertificate
+		// for more info.
+		tlsConfig.InsecureSkipVerify = true
+		tlsConfig.VerifyPeerCertificate = func(certificates [][]byte, _ [][]*x509.Certificate) error {
+			certs := make([]*x509.Certificate, len(certificates))
+			for i, asn1Data := range certificates {
+				cert, err := x509.ParseCertificate(asn1Data)
+				if err != nil {
+					return errors.New("failed to parse certificate from server: " + err.Error())
+				}
+				certs[i] = cert
+			}
+
+			// Leave DNSName empty to skip hostname verification.
+			opts := x509.VerifyOptions{
+				Roots:         tlsConfig.RootCAs,
+				Intermediates: x509.NewCertPool(),
+			}
+			// Skip the first cert because it's the leaf. All others
+			// are intermediates.
+			for _, cert := range certs[1:] {
+				opts.Intermediates.AddCert(cert)
+			}
+			_, err := certs[0].Verify(opts)
+			return err
+		}
+	case "verify-full":
+		tlsConfig.ServerName = host
+	default:
+		tlsConf := getTLSConfigClone(sslmode)
+		if tlsConf == nil {
+			return nil, errors.New("sslmode is invalid")
+		}
+		return []*tls.Config{tlsConf}, nil
+	}
+
+	if sslrootcert != "" {
+		caCertPool := x509.NewCertPool()
+
+		caPath := sslrootcert
+		caCert, err := ioutil.ReadFile(caPath)
+		if err != nil {
+			return nil, fmt.Errorf("unable to read CA file: %w", err)
+		}
+
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, errors.New("unable to add CA to cert pool")
+		}
+
+		tlsConfig.RootCAs = caCertPool
+		tlsConfig.ClientCAs = caCertPool
+	}
+
+	if (sslcert != "" && sslkey == "") || (sslcert == "" && sslkey != "") {
+		return nil, errors.New(`both "sslcert" and "sslkey" are required`)
+	}
+
+	if sslcert != "" && sslkey != "" {
+		cert, err := tls.LoadX509KeyPair(sslcert, sslkey)
+		if err != nil {
+			return nil, fmt.Errorf("unable to read cert: %w", err)
+		}
+
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+
+	switch sslmode {
+	case "allow":
+		return []*tls.Config{nil, tlsConfig}, nil
+	case "prefer":
+		return []*tls.Config{tlsConfig, nil}, nil
+	case "require", "verify-ca", "verify-full":
+		return []*tls.Config{tlsConfig}, nil
+	default:
+		panic("BUG: bad sslmode should already have been caught")
+	}
+}
+
+var (
+	tlsConfigLock     sync.RWMutex
+	tlsConfigRegistry map[string]*tls.Config
+)
+
+func RegisterTLSConfig(key string, config *tls.Config) error {
+	if _, isBool := readBool(key); isBool ||
+		strings.ToLower(key) == "require" ||
+		strings.ToLower(key) == "verify-ca" ||
+		strings.ToLower(key) == "verify-full" ||
+		strings.ToLower(key) == "disable" {
+		return fmt.Errorf("key '%s' is reserved", key)
+	}
+
+	tlsConfigLock.Lock()
+	if tlsConfigRegistry == nil {
+		tlsConfigRegistry = make(map[string]*tls.Config)
+	}
+
+	tlsConfigRegistry[key] = config
+	tlsConfigLock.Unlock()
+	return nil
+}
+
+// DeregisterTLSConfig removes the tls.Config associated with key.
+func DeregisterTLSConfig(key string) {
+	tlsConfigLock.Lock()
+	if tlsConfigRegistry != nil {
+		delete(tlsConfigRegistry, key)
+	}
+	tlsConfigLock.Unlock()
+}
+
+func getTLSConfigClone(key string) (config *tls.Config) {
+	tlsConfigLock.RLock()
+	if v, ok := tlsConfigRegistry[key]; ok {
+		config = v.Clone()
+	}
+	tlsConfigLock.RUnlock()
+	return
+}
+
+// Returns the bool value of the input.
+// The 2nd return value indicates if the input was a valid bool value
+func readBool(input string) (value bool, valid bool) {
+	switch input {
+	case "1", "true", "TRUE", "True":
+		return true, true
+	case "0", "false", "FALSE", "False":
+		return false, true
+	}
+
+	// Not a valid bool value
+	return
+}
 
 // ssl generates a function to upgrade a net.Conn based on the "sslmode" and
 // related settings. The function is nil when no upgrade should take place.
