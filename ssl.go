@@ -3,13 +3,13 @@ package pq
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
+	"encoding/pem"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
 	"os/user"
-	"path/filepath"
+	"path"
 	"strings"
 	"sync"
 )
@@ -63,7 +63,7 @@ func configTLS(settings map[string]string) ([]*tls.Config, error) {
 			for i, asn1Data := range certificates {
 				cert, err := x509.ParseCertificate(asn1Data)
 				if err != nil {
-					return errors.New("failed to parse certificate from server: " + err.Error())
+					return fmterrorf("failed to parse certificate from server: " + err.Error())
 				}
 				certs[i] = cert
 			}
@@ -86,7 +86,7 @@ func configTLS(settings map[string]string) ([]*tls.Config, error) {
 	default:
 		tlsConf := getTLSConfigClone(sslmode)
 		if tlsConf == nil {
-			return nil, errors.New("sslmode is invalid")
+			return nil, fmterrorf("sslmode is invalid")
 		}
 		return []*tls.Config{tlsConf}, nil
 	}
@@ -101,7 +101,7 @@ func configTLS(settings map[string]string) ([]*tls.Config, error) {
 		}
 
 		if !caCertPool.AppendCertsFromPEM(caCert) {
-			return nil, errors.New("unable to add CA to cert pool")
+			return nil, fmterrorf("unable to add CA to cert pool")
 		}
 
 		tlsConfig.RootCAs = caCertPool
@@ -109,16 +109,16 @@ func configTLS(settings map[string]string) ([]*tls.Config, error) {
 	}
 
 	if (sslcert != "" && sslkey == "") || (sslcert == "" && sslkey != "") {
-		return nil, errors.New(`both "sslcert" and "sslkey" are required`)
+		return nil, fmterrorf(`both "sslcert" and "sslkey" are required`)
 	}
 
-	if sslcert != "" && sslkey != "" {
-		cert, err := tls.LoadX509KeyPair(sslcert, sslkey)
-		if err != nil {
-			return nil, fmt.Errorf("unable to read cert: %w", err)
-		}
-
-		tlsConfig.Certificates = []tls.Certificate{cert}
+	err := sslClientCertificates(tlsConfig, settings)
+	if err != nil {
+		return nil, err
+	}
+	err = sslCertificateAuthority(tlsConfig, settings)
+	if err != nil {
+		return nil, err
 	}
 
 	switch sslmode {
@@ -262,55 +262,85 @@ func ssl(o values) (func(net.Conn) (net.Conn, error), error) {
 // in the user's home directory. The configured files must exist and have
 // the correct permissions.
 func sslClientCertificates(tlsConf *tls.Config, o values) error {
-	sslinline := o["sslinline"]
-	if sslinline == "true" {
-		cert, err := tls.X509KeyPair([]byte(o["sslcert"]), []byte(o["sslkey"]))
+	var (
+		sslCertBytes []byte
+		sslKeyBytes  []byte
+		err          error
+	)
+	sslInLine := o["sslinline"]
+	if sslInLine == "true" {
+		sslCertBytes = []byte(o["sslcert"])
+		sslKeyBytes = []byte(o["sslkey"])
+		return nil
+	} else {
+		// user.Current() might fail when cross-compiling. We have to ignore the
+		// error and continue without home directory defaults, since we wouldn't
+		// know from where to load them.
+		user, _ := user.Current()
+
+		// In libpq, the client certificate is only loaded if the setting is not blank.
+		//
+		// https://github.com/postgres/postgres/blob/REL9_6_2/src/interfaces/libpq/fe-secure-openssl.c#L1036-L1037
+		sslCert := o["sslcert"]
+		if len(sslCert) == 0 && user != nil {
+			sslCert = path.Join(user.HomeDir, ".postgresql", "postgresql.crt")
+		}
+		// https://github.com/postgres/postgres/blob/REL9_6_2/src/interfaces/libpq/fe-secure-openssl.c#L1045
+		if len(sslCert) == 0 {
+			return nil
+		}
+		// https://github.com/postgres/postgres/blob/REL9_6_2/src/interfaces/libpq/fe-secure-openssl.c#L1050:L1054
+		if _, err := os.Stat(sslCert); os.IsNotExist(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+
+		// In libpq, the ssl key is only loaded if the setting is not blank.
+		//
+		// https://github.com/postgres/postgres/blob/REL9_6_2/src/interfaces/libpq/fe-secure-openssl.c#L1123-L1222
+		sslKey := o["sslkey"]
+		if len(sslKey) == 0 && user != nil {
+			sslKey = path.Join(user.HomeDir, ".postgresql", "postgresql.key")
+		}
+
+		if len(sslKey) > 0 {
+			if err = sslKeyPermissions(sslKey); err != nil {
+				return err
+			}
+		}
+		sslCertBytes, err = ioutil.ReadFile(sslCert)
 		if err != nil {
 			return err
 		}
-		tlsConf.Certificates = []tls.Certificate{cert}
-		return nil
-	}
-
-	// user.Current() might fail when cross-compiling. We have to ignore the
-	// error and continue without home directory defaults, since we wouldn't
-	// know from where to load them.
-	user, _ := user.Current()
-
-	// In libpq, the client certificate is only loaded if the setting is not blank.
-	//
-	// https://github.com/postgres/postgres/blob/REL9_6_2/src/interfaces/libpq/fe-secure-openssl.c#L1036-L1037
-	sslcert := o["sslcert"]
-	if len(sslcert) == 0 && user != nil {
-		sslcert = filepath.Join(user.HomeDir, ".postgresql", "postgresql.crt")
-	}
-	// https://github.com/postgres/postgres/blob/REL9_6_2/src/interfaces/libpq/fe-secure-openssl.c#L1045
-	if len(sslcert) == 0 {
-		return nil
-	}
-	// https://github.com/postgres/postgres/blob/REL9_6_2/src/interfaces/libpq/fe-secure-openssl.c#L1050:L1054
-	if _, err := os.Stat(sslcert); os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
-		return err
-	}
-
-	// In libpq, the ssl key is only loaded if the setting is not blank.
-	//
-	// https://github.com/postgres/postgres/blob/REL9_6_2/src/interfaces/libpq/fe-secure-openssl.c#L1123-L1222
-	sslkey := o["sslkey"]
-	if len(sslkey) == 0 && user != nil {
-		sslkey = filepath.Join(user.HomeDir, ".postgresql", "postgresql.key")
-	}
-
-	if len(sslkey) > 0 {
-		if err := sslKeyPermissions(sslkey); err != nil {
+		sslKeyBytes, err = ioutil.ReadFile(sslKey)
+		if err != nil {
 			return err
 		}
 	}
-
-	cert, err := tls.LoadX509KeyPair(sslcert, sslkey)
+	block, _ := pem.Decode(sslKeyBytes)
+	if block == nil {
+		return fmterrorf("ssh: no key found")
+	}
+	if x509.IsEncryptedPEMBlock(block) {
+		sslPassword, ok := o["sslpassword"]
+		if !ok {
+			return fmterrorf("sslpassword is invalid")
+		}
+		buf, err := x509.DecryptPEMBlock(block, []byte(sslPassword))
+		if err != nil {
+			if err == x509.IncorrectPasswordError {
+				return err
+			}
+			return fmt.Errorf("ssl: cannot decode sslkeys: %v", err)
+		}
+		block.Bytes = buf
+		block.Headers = nil
+		sslKeyBytes = pem.EncodeToMemory(block)
+	}
+	cert, err := tls.X509KeyPair(sslCertBytes, sslKeyBytes)
 	if err != nil {
+		fmt.Println("2", err)
 		return err
 	}
 

@@ -259,6 +259,7 @@ func ParseConfig(connString string) (*Config, error) {
 		"sslcert":                        struct{}{},
 		"sslrootcert":                    struct{}{},
 		"sslinline":                      struct{}{},
+		"sslpassword":                    struct{}{},
 		"target_session_attrs":           struct{}{},
 		"min_read_buffer_size":           struct{}{},
 		"service":                        struct{}{},
