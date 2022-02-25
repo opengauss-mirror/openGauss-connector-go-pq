@@ -4,23 +4,25 @@ fork from [github/lib/pq](https://github.com/lib/pq)
 
 ## 安装
 
-  go get gitee.com/opengauss/openGauss-connector-go-pq
+```bash
+go get gitee.com/opengauss/openGauss-connector-go-pq
+```
 
 ## openGauss版libpq差异
 
 使用原生libpq go驱动程序访问openGauss时，会报以下错误。
 
-```
- pq: Invalid username/password,login denied.
+```text
+pq: Invalid username/password,login denied.
 ```
 
 因为openGauss默认的用户连接密码认证方法是sha256，这是唯一的加密方法。 openGauss配置经以下几种方法修改后支持原生libpq连接。
 
 1. 设置openGauss初始化参数password_encryption_type。
 
-```
-alter system set password_encryption_type=0;
-```
+    ```sql
+    alter system set password_encryption_type=0;
+    ```
 
 2. 设置pg_hba.conf以允许md5密码验证：host all test 0.0.0.0/0 md5。
 
@@ -33,6 +35,12 @@ alter system set password_encryption_type=0;
 * 适配openGauss SHA256/SM3 密码认证
 * 支持连接字符串多host定义
 * SSL
+  * sslmode
+  * sslrootcert
+  * sslcert
+  * sslkey
+  * sslinline      指定sslkey/sslcert是字符串,而不是文件名
+  * sslpassword    指定sslkey密码短语
 * 处理`database/sql`坏连接
 * 正确扫描`time.Time`（即`timestamp[tz]`, `time[tz]`, `date`）
 * 正确扫描二进制Blob（即`bytea`）
@@ -45,17 +53,16 @@ alter system set password_encryption_type=0;
 * 支持pgpass
 * GSS（Kerberos）验证
 
-
 ## Multiple Hosts
 
 示例[multi_ip](example/multi_ip/multi_ip.go)
 
 postgres 介绍文档[LIBPQ-MULTIPLE-HOSTS](https://www.postgresql.org/docs/10/libpq-connect.html#LIBPQ-MULTIPLE-HOSTS)
 
-- 支持同时定义主从地址,自动选择主库连接,当发生切换事自动连接新当主库.
-- 连接字符中target_session_attrs参数暂时只能定义read-write(默认配置),配置为read-only存在问题
+* 支持同时定义主从地址,自动选择主库连接,当发生切换事自动连接新当主库.
+* 连接字符中target_session_attrs参数暂时只能定义read-write(默认配置),配置为read-only存在问题
 
-```
+```text
 postgres://gaussdb:secret@foo,bar,baz/mydb?sslmode=disable
 postgres://gaussdb:secret@foo:1,bar:2,baz:3/mydb?sslmode=disable
 user=gaussdb password=secret host=foo,bar,baz port=5432 dbname=mydb sslmode=disable
@@ -64,7 +71,7 @@ user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb ss
 
 ## 示例
 
-```
+```go
 import (
  "database/sql"
 
