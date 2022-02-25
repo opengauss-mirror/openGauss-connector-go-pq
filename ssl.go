@@ -318,11 +318,10 @@ func sslClientCertificates(tlsConf *tls.Config, o values) error {
 			return err
 		}
 	}
-	block, a := pem.Decode(sslKeyBytes)
+	block, _ := pem.Decode(sslKeyBytes)
 	if block == nil {
 		return fmterrorf("ssh: no key found")
 	}
-	fmt.Println(a)
 	if x509.IsEncryptedPEMBlock(block) {
 		sslPassword, ok := o["sslpassword"]
 		if !ok {
