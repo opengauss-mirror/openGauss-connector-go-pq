@@ -190,38 +190,18 @@ func ParseConfig(connString string) (*Config, error) {
 	defaultSettings := defaultSettings()
 	envSettings := parseEnvSettings()
 
-	connStringSettings := make(map[string]string)
-	if connString != "" {
-		var err error
-		// connString may be a database URL or a DSN
-		if strings.HasPrefix(connString, "postgres://") || strings.HasPrefix(connString, "postgresql://") ||
-			strings.HasPrefix(connString, "opengauss://") || strings.HasPrefix(connString, "mogdb://") {
-			connStringSettings, err = parseURLSettings(connString)
-			if err != nil {
-				return nil, &parseConfigError{connString: connString, msg: "failed to parse as URL", err: err}
-			}
-		} else {
-			connStringSettings, err = parseDSNSettings(connString)
-			if err != nil {
-				return nil, &parseConfigError{connString: connString, msg: "failed to parse as DSN", err: err}
-			}
-		}
+	connStringSettings, err := ParseURLToMap(connString)
+	if err != nil {
+		return nil, err
 	}
-
 	settings := mergeSettings(defaultSettings, envSettings, connStringSettings)
 	if service, present := settings["service"]; present {
 		serviceSettings, err := parseServiceSettings(settings["servicefile"], service)
 		if err != nil {
 			return nil, &parseConfigError{connString: connString, msg: "failed to read service", err: err}
 		}
-
 		settings = mergeSettings(defaultSettings, envSettings, serviceSettings, connStringSettings)
 	}
-
-	// minReadBufferSize, err := strconv.ParseInt(settings["min_read_buffer_size"], 10, 32)
-	// if err != nil {
-	// 	return nil, &parseConfigError{connString: connString, msg: "cannot parse min_read_buffer_size", err: err}
-	// }
 
 	config := &Config{
 		createdByParseConfig: true,
@@ -411,6 +391,28 @@ func parseEnvSettings() map[string]string {
 	}
 
 	return settings
+}
+
+func ParseURLToMap(connString string) (map[string]string, error) {
+	connStringSettings := make(map[string]string)
+	if connString == "" {
+		return connStringSettings, nil
+	}
+	var err error
+	// connString may be a database URL or a DSN
+	if strings.HasPrefix(connString, "postgres://") || strings.HasPrefix(connString, "postgresql://") ||
+		strings.HasPrefix(connString, "opengauss://") || strings.HasPrefix(connString, "mogdb://") {
+		connStringSettings, err = parseURLSettings(connString)
+		if err != nil {
+			return nil, &parseConfigError{connString: connString, msg: "failed to parse as URL", err: err}
+		}
+	} else {
+		connStringSettings, err = parseDSNSettings(connString)
+		if err != nil {
+			return nil, &parseConfigError{connString: connString, msg: "failed to parse as DSN", err: err}
+		}
+	}
+	return connStringSettings, nil
 }
 
 func parseURLSettings(connString string) (map[string]string, error) {
