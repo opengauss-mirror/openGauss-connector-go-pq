@@ -57,16 +57,23 @@ pq: Invalid username/password,login denied.
 
 示例[multi_ip](example/multi_ip/multi_ip.go)
 
-postgres 介绍文档[LIBPQ-MULTIPLE-HOSTS](https://www.postgresql.org/docs/10/libpq-connect.html#LIBPQ-MULTIPLE-HOSTS)
+postgres 介绍文档[LIBPQ-MULTIPLE-HOSTS](https://www.postgresql.org/docs/14/libpq-connect.html#LIBPQ-MULTIPLE-HOSTS)
 
 * 支持同时定义主从地址,自动选择主库连接,当发生切换事自动连接新当主库.
 * 连接字符中target_session_attrs参数暂时只能定义read-write(默认配置),配置为read-only存在问题
+* target_session_attrs
+  - any (default)
+  - read-write
+  - read-only
+  - primary
+  - standby
+  - prefer-standby
 
 ```text
-postgres://gaussdb:secret@foo,bar,baz/mydb?sslmode=disable
-postgres://gaussdb:secret@foo:1,bar:2,baz:3/mydb?sslmode=disable
-user=gaussdb password=secret host=foo,bar,baz port=5432 dbname=mydb sslmode=disable
-user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb sslmode=disable
+postgres://gaussdb:secret@foo,bar,baz/mydb?sslmode=disable&target_session_attrs=primary&connect_timeout=1
+postgres://gaussdb:secret@foo:1,bar:2,baz:3/mydb?sslmode=disable&target_session_attrs=primary&connect_timeout=1
+user=gaussdb password=secret host=foo,bar,baz port=5432 dbname=mydb sslmode=disable target_session_attrs=primary connect_timeout=1
+user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb sslmode=disable target_session_attrs=primary connect_timeout=1
 ```
 
 ## 示例
