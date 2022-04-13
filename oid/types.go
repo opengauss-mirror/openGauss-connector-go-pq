@@ -20,6 +20,8 @@ const (
 	T_oidvector                      Oid = 30
 	T_xid32                          Oid = 31
 	T_oidvector_extend               Oid = 32
+	T_int2vector_extend              Oid = 33
+	T_int16                          Oid = 34
 	T_pg_type                        Oid = 71
 	T_pg_attribute                   Oid = 75
 	T_pg_proc                        Oid = 81
@@ -59,6 +61,7 @@ const (
 	T__bytea                         Oid = 1001
 	T__char                          Oid = 1002
 	T__name                          Oid = 1003
+	T__int2vector_extend             Oid = 1004
 	T__int2                          Oid = 1005
 	T__int2vector                    Oid = 1006
 	T__int4                          Oid = 1007
@@ -100,6 +103,7 @@ const (
 	T_interval                       Oid = 1186
 	T__interval                      Oid = 1187
 	T__numeric                       Oid = 1231
+	T__int16                         Oid = 1234
 	T_pg_database                    Oid = 1248
 	T__cstring                       Oid = 1263
 	T_timetz                         Oid = 1266
@@ -159,6 +163,8 @@ const (
 	T_regdictionary                  Oid = 3769
 	T__regdictionary                 Oid = 3770
 	T_pg_partition                   Oid = 3790
+	T_jsonb                          Oid = 3802
+	T__jsonb                         Oid = 3807
 	T_anyrange                       Oid = 3831
 	T_int4range                      Oid = 3904
 	T__int4range                     Oid = 3905
@@ -174,6 +180,7 @@ const (
 	T__int8range                     Oid = 3927
 	T__nvarchar2                     Oid = 3968
 	T_nvarchar2                      Oid = 3969
+	T_gs_model_warehouse             Oid = 3994
 	T_hll                            Oid = 4301
 	T__hll                           Oid = 4302
 	T_hll_hashval                    Oid = 4303
@@ -184,11 +191,23 @@ const (
 	T_byteawithoutordercol           Oid = 4403
 	T__byteawithoutorderwithequalcol Oid = 4404
 	T__byteawithoutordercol          Oid = 4405
+	T_TdigestData                    Oid = 4406
+	T__TdigestData                   Oid = 4407
 	T_int1                           Oid = 5545
 	T__int1                          Oid = 5546
+	T_hash16                         Oid = 5801
+	T_hash32                         Oid = 5802
+	T__hash16                        Oid = 5803
+	T__hash32                        Oid = 5804
+	T_pg_subscription                Oid = 6128
+	T_pg_publication                 Oid = 6141
+	T_pg_publication_rel             Oid = 6142
+	T_pg_replication_origin          Oid = 6143
 	T_pg_extension_data_source       Oid = 7177
 	T_smalldatetime                  Oid = 9003
 	T__smalldatetime                 Oid = 9005
+	T_pg_hashbucket                  Oid = 9108
+	T_gs_package                     Oid = 9745
 )
 
 var TypeName = map[Oid]string{
@@ -209,6 +228,8 @@ var TypeName = map[Oid]string{
 	T_oidvector:                      "OIDVECTOR",
 	T_xid32:                          "XID32",
 	T_oidvector_extend:               "OIDVECTOR_EXTEND",
+	T_int2vector_extend:              "INT2VECTOR_EXTEND",
+	T_int16:                          "INT16",
 	T_pg_type:                        "PG_TYPE",
 	T_pg_attribute:                   "PG_ATTRIBUTE",
 	T_pg_proc:                        "PG_PROC",
@@ -248,6 +269,7 @@ var TypeName = map[Oid]string{
 	T__bytea:                         "_BYTEA",
 	T__char:                          "_CHAR",
 	T__name:                          "_NAME",
+	T__int2vector_extend:             "_INT2VECTOR_EXTEND",
 	T__int2:                          "_INT2",
 	T__int2vector:                    "_INT2VECTOR",
 	T__int4:                          "_INT4",
@@ -289,6 +311,7 @@ var TypeName = map[Oid]string{
 	T_interval:                       "INTERVAL",
 	T__interval:                      "_INTERVAL",
 	T__numeric:                       "_NUMERIC",
+	T__int16:                         "_INT16",
 	T_pg_database:                    "PG_DATABASE",
 	T__cstring:                       "_CSTRING",
 	T_timetz:                         "TIMETZ",
@@ -348,6 +371,8 @@ var TypeName = map[Oid]string{
 	T_regdictionary:                  "REGDICTIONARY",
 	T__regdictionary:                 "_REGDICTIONARY",
 	T_pg_partition:                   "PG_PARTITION",
+	T_jsonb:                          "JSONB",
+	T__jsonb:                         "_JSONB",
 	T_anyrange:                       "ANYRANGE",
 	T_int4range:                      "INT4RANGE",
 	T__int4range:                     "_INT4RANGE",
@@ -363,6 +388,7 @@ var TypeName = map[Oid]string{
 	T__int8range:                     "_INT8RANGE",
 	T__nvarchar2:                     "_NVARCHAR2",
 	T_nvarchar2:                      "NVARCHAR2",
+	T_gs_model_warehouse:             "GS_MODEL_WAREHOUSE",
 	T_hll:                            "HLL",
 	T__hll:                           "_HLL",
 	T_hll_hashval:                    "HLL_HASHVAL",
@@ -373,9 +399,21 @@ var TypeName = map[Oid]string{
 	T_byteawithoutordercol:           "BYTEAWITHOUTORDERCOL",
 	T__byteawithoutorderwithequalcol: "_BYTEAWITHOUTORDERWITHEQUALCOL",
 	T__byteawithoutordercol:          "_BYTEAWITHOUTORDERCOL",
+	T_TdigestData:                    "TDIGESTDATA",
+	T__TdigestData:                   "_TDIGESTDATA",
 	T_int1:                           "INT1",
 	T__int1:                          "_INT1",
+	T_hash16:                         "HASH16",
+	T_hash32:                         "HASH32",
+	T__hash16:                        "_HASH16",
+	T__hash32:                        "_HASH32",
+	T_pg_subscription:                "PG_SUBSCRIPTION",
+	T_pg_publication:                 "PG_PUBLICATION",
+	T_pg_publication_rel:             "PG_PUBLICATION_REL",
+	T_pg_replication_origin:          "PG_REPLICATION_ORIGIN",
 	T_pg_extension_data_source:       "PG_EXTENSION_DATA_SOURCE",
 	T_smalldatetime:                  "SMALLDATETIME",
 	T__smalldatetime:                 "_SMALLDATETIME",
+	T_pg_hashbucket:                  "PG_HASHBUCKET",
+	T_gs_package:                     "GS_PACKAGE",
 }
