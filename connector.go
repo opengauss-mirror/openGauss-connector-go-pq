@@ -179,8 +179,8 @@ func (c *Connector) connect(ctx context.Context, config *Config) (cn *conn, err 
 		cn, err = c.connectFallbackConfig(ctx, config, fc)
 		if err != nil {
 			if pgErr, ok := err.(*Error); ok {
-				err = &connectError{config: config, msg: "server error", err: pgErr}
-				ErrCodeInvalidPassword := "28P01"                   // worng password
+				err = &connectError{config: config, msg: "server error", fallbackConfig: fc, err: pgErr}
+				ErrCodeInvalidPassword := "28P01"                   // wrong password
 				ErrCodeInvalidAuthorizationSpecification := "28000" // db does not exist
 				if pgErr.Code.String() == ErrCodeInvalidPassword ||
 					pgErr.Code.String() == ErrCodeInvalidAuthorizationSpecification {
@@ -223,12 +223,12 @@ func (c *Connector) connectFallbackConfig(ctx context.Context, config *Config, f
 	network, address := NetworkAddress(fallbackConfig.Host, fallbackConfig.Port)
 	cn.c, err = config.DialFunc(ctx, network, address)
 	if err != nil {
-		return nil, &connectError{config: config, msg: "dial error", err: err}
+		return nil, &connectError{config: config, msg: "dial error", err: err, fallbackConfig: fallbackConfig}
 	}
 	if fallbackConfig.TLSConfig != nil {
 		if err := cn.startTLS(fallbackConfig.TLSConfig); err != nil {
 			cn.c.Close()
-			return nil, &connectError{config: config, msg: "tls error", err: err}
+			return nil, &connectError{config: config, msg: "tls error", err: err, fallbackConfig: fallbackConfig}
 		}
 	}
 	panicking := true

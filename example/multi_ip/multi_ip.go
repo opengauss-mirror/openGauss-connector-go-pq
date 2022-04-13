@@ -33,7 +33,6 @@ DSN="user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=my
 )
 
 func main() {
-
 	connStr := os.Getenv("DSN")
 	if connStr == "" {
 		fmt.Println("please define the env DSN. example:\n" + dsnExample)
@@ -45,10 +44,9 @@ func main() {
 		log.Fatal(err)
 	}
 	var (
-		newTimer = time.NewTicker(1 * time.Second)
+		newTimer = time.NewTicker(500 * time.Millisecond)
 		doClose  = make(chan struct{}, 1)
 	)
-
 	go func() {
 		for {
 			select {
@@ -62,7 +60,6 @@ func main() {
 			}
 		}
 	}()
-
 	sigChan := make(chan os.Signal, 2)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL) //nolint:staticcheck
 	defer signal.Stop(sigChan)

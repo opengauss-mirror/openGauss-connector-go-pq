@@ -526,16 +526,24 @@ func (cn *conn) errRecover(err *error) {
 }
 
 type connectError struct {
-	config *Config
-	msg    string
-	err    error
+	config         *Config
+	msg            string
+	fallbackConfig *FallbackConfig
+	err            error
 }
 
 func (e *connectError) Error() string {
 	sb := &strings.Builder{}
-	fmt.Fprintf(sb, "failed to connect to `host=%s user=%s database=%s`: %s", e.config.Host, e.config.User, e.config.Database, e.msg)
+	sb.WriteString("failed to connect to ")
+	var host = e.config.Host
+	var port = e.config.Port
+	if e.fallbackConfig != nil && e.fallbackConfig.Host != "" {
+		host = e.fallbackConfig.Host
+		port = e.fallbackConfig.Port
+	}
+	sb.WriteString(fmt.Sprintf("`host=%s port=%v user=%s database=%s`: %s ", host, port, e.config.User, e.config.Database, e.msg))
 	if e.err != nil {
-		fmt.Fprintf(sb, " (%s)", e.err.Error())
+		sb.WriteString(e.err.Error())
 	}
 	return sb.String()
 }
