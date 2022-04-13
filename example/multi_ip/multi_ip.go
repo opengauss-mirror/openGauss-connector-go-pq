@@ -22,15 +22,18 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64
 */
 
 var (
-	dsnExample = `DSN="postgres://gaussdb:secret@foo,bar,baz/mydb?sslmode=disable"
-DSN="postgres://gaussdb:secret@foo:1,bar:2,baz:3/mydb?sslmode=disable"
-DSN="user=gaussdb password=secret host=foo,bar,baz port=5432 dbname=mydb sslmode=disable"
-DSN="user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb sslmode=disable"`
+	/*
+		target_session_attrs 	--> Set the connection database properties
+		connect_timeout			--> Set connect timeout. unit second
+	*/
+	dsnExample = `DSN="postgres://gaussdb:secret@foo,bar,baz/mydb?sslmode=disable&target_session_attrs=primary&connect_timeout=1"
+DSN="postgres://gaussdb:secret@foo:1,bar:2,baz:3/mydb?sslmode=disable&target_session_attrs=primary&connect_timeout=1"
+DSN="user=gaussdb password=secret host=foo,bar,baz port=5432 dbname=mydb sslmode=disable target_session_attrs=primary connect_timeout=1"
+DSN="user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb sslmode=disable target_session_attrs=primary connect_timeout=1"`
 )
 
 func main() {
-	// os.Setenv("DSN", "postgres://mogdb:mtkOP@123@127.0.0.1:5436,127.0.0.1:1111/postgres?"+
-	// 	"sslmode=disable&loggerLevel=debug")
+
 	connStr := os.Getenv("DSN")
 	if connStr == "" {
 		fmt.Println("please define the env DSN. example:\n" + dsnExample)
@@ -70,11 +73,6 @@ func main() {
 
 func getNodeName(db *sql.DB) error {
 	var err error
-	// tx, err := db.Begin()
-	// if err != nil {
-	// 	return err
-	// }
-	// defer tx.Commit()
 	var sysdate string
 	var pgIsInRecovery bool
 	var nodeName string
@@ -84,12 +82,6 @@ func getNodeName(db *sql.DB) error {
 		return err
 	}
 	var channel string
-
-	// err = db.QueryRow("select channel from pg_stat_get_wal_senders() limit 1 ").
-	// 	Scan(&channel)
 	fmt.Println(sysdate, nodeName, pgIsInRecovery, channel)
-	// if err != nil {
-	// 	return err
-	// }
 	return nil
 }

@@ -56,19 +56,25 @@ We still prefer to use a more secure encryption method like sha256, so the modif
 
 example [multi_ip](example/multi_ip/multi_ip.go)
 
-postgres docs[LIBPQ-MULTIPLE-HOSTS](https://www.postgresql.org/docs/10/libpq-connect.html#LIBPQ-MULTIPLE-HOSTS)
+postgres docs[LIBPQ-MULTIPLE-HOSTS](https://www.postgresql.org/docs/14/libpq-connect.html#LIBPQ-MULTIPLE-HOSTS)
 
 * Support to define the master and slave addresses at the same time, automatically select the main library connection,
 and automatically connect to the new master library when a switch occurs.
-
 * The target_session_attrs parameter in the connection character can only define read-write (default configuration),
 and there is a problem with the configuration as read-only
-
+* target_session_attrs
+  - any (default)
+  - read-write
+  - read-only
+  - primary
+  - standby
+  - prefer-standby
+- 
 ```text
-postgres://gaussdb:secret@foo,bar,baz/mydb?sslmode=disable
-postgres://gaussdb:secret@foo:1,bar:2,baz:3/mydb?sslmode=disable
-user=gaussdb password=secret host=foo,bar,baz port=5432 dbname=mydb sslmode=disable
-user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb sslmode=disable
+postgres://gaussdb:secret@foo,bar,baz/mydb?sslmode=disable&target_session_attrs=primary&connect_timeout=1
+postgres://gaussdb:secret@foo:1,bar:2,baz:3/mydb?sslmode=disable&target_session_attrs=primary&connect_timeout=1
+user=gaussdb password=secret host=foo,bar,baz port=5432 dbname=mydb sslmode=disable target_session_attrs=primary connect_timeout=1
+user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb sslmode=disable target_session_attrs=primary connect_timeout=1
 ```
 
 ## Example
