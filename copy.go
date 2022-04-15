@@ -45,8 +45,10 @@ func CopyInSchema(schema, table string, columns ...string) string {
 }
 
 type copyin struct {
-	cn      *conn
-	buffer  []byte
+	cn           *conn
+	buffer       []byte
+	cpBufferSize int64
+
 	rowData chan []byte
 	done    chan bool
 
@@ -57,6 +59,9 @@ type copyin struct {
 		err error
 		driver.Result
 	}
+
+	paramTyps []int
+	rowFormat byte
 }
 
 const ciBufferSize = 64 * 1024
@@ -68,16 +73,20 @@ func (cn *conn) prepareCopyIn(q string) (_ driver.Stmt, err error) {
 	if !cn.isInTransaction() {
 		return nil, errCopyNotSupportedOutsideTxn
 	}
-
+	cpBufferSize := cn.config.cpBufferSize
+	if cpBufferSize == 0 {
+		cpBufferSize = ciBufferSize
+	}
 	ci := &copyin{
-		cn:      cn,
-		buffer:  make([]byte, 0, ciBufferSize),
-		rowData: make(chan []byte),
-		done:    make(chan bool, 1),
+		cn:           cn,
+		buffer:       make([]byte, 0, cpBufferSize),
+		cpBufferSize: cpBufferSize,
+		rowData:      make(chan []byte),
+		done:         make(chan bool, 1),
 	}
 	// add CopyData identifier + 4 bytes for message length
 	ci.buffer = append(ci.buffer, 'd', 0, 0, 0, 0)
-
+	cn.log(nil, LogLevelDebug, "FE=> Query(CopyStart)", nil)
 	b := cn.writeBuf('Q')
 	b.string(q)
 	cn.send(b)
@@ -87,6 +96,8 @@ awaitCopyInResponse:
 		t, r := cn.recv1()
 		switch t {
 		case 'G':
+			cn.log(nil, LogLevelDebug, "<=BE CopyInResponse", nil)
+			ci.readStatementDescribeResponse(r)
 			if r.byte() != 0 {
 				err = errBinaryCopyNotSupported
 				break awaitCopyInResponse
@@ -94,6 +105,7 @@ awaitCopyInResponse:
 			go ci.resploop()
 			return ci, nil
 		case 'H':
+			cn.log(nil, LogLevelDebug, "<=BE CopyOutResponse", nil)
 			err = errCopyToNotSupported
 			break awaitCopyInResponse
 		case 'E':
@@ -131,10 +143,18 @@ awaitCopyInResponse:
 	}
 }
 
+func (ci *copyin) readStatementDescribeResponse(r *readBuf) {
+	ci.rowFormat = r.byte()
+	nparams := r.int16()
+	ci.paramTyps = make([]int, nparams)
+	for i := range ci.paramTyps {
+		ci.paramTyps[i] = int(r.byte())
+	}
+}
+
 func (ci *copyin) flush(buf []byte) {
 	// set message length (without message identifier)
 	binary.BigEndian.PutUint32(buf[1:], uint32(len(buf)-1))
-
 	_, err := ci.cn.c.Write(buf)
 	if err != nil {
 		panic(err)
@@ -264,7 +284,7 @@ func (ci *copyin) Exec(v []driver.Value) (r driver.Result, err error) {
 
 	ci.buffer = append(ci.buffer, '\n')
 
-	if len(ci.buffer) > ciBufferFlushSize {
+	if len(ci.buffer) > int(ci.cpBufferSize) {
 		ci.flush(ci.buffer)
 		// reset buffer, keep bytes for message identifier and length
 		ci.buffer = ci.buffer[:5]

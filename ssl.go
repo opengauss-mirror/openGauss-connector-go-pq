@@ -18,11 +18,11 @@ import (
 // necessary to allow returning multiple TLS configs as sslmode "allow" and
 // "prefer" allow fallback.
 func configTLS(settings map[string]string) ([]*tls.Config, error) {
-	host := settings["host"]
-	sslmode := settings["sslmode"]
-	sslrootcert := settings["sslrootcert"]
-	sslcert := settings["sslcert"]
-	sslkey := settings["sslkey"]
+	host := settings[paramHost]
+	sslmode := settings[paramSSLMode]
+	sslrootcert := settings[paramSSLRootCert]
+	sslcert := settings[paramSSLCert]
+	sslkey := settings[paramSSLKey]
 
 	// Match libpq default behavior
 	if sslmode == "" {
@@ -194,7 +194,7 @@ func readBool(input string) (value bool, valid bool) {
 func ssl(o values) (func(net.Conn) (net.Conn, error), error) {
 	verifyCaOnly := false
 	tlsConf := tls.Config{}
-	switch mode := o["sslmode"]; mode {
+	switch mode := o[paramSSLMode]; mode {
 	// "require" is the default.
 	case "", "require":
 		// We must skip TLS's own verification since it requires full
@@ -209,11 +209,11 @@ func ssl(o values) (func(net.Conn) (net.Conn, error), error) {
 		// server certificate is validated against the CA. Relying on this
 		// behavior is discouraged, and applications that need certificate
 		// validation should always use verify-ca or verify-full.
-		if sslrootcert, ok := o["sslrootcert"]; ok {
+		if sslrootcert, ok := o[paramSSLRootCert]; ok {
 			if _, err := os.Stat(sslrootcert); err == nil {
 				verifyCaOnly = true
 			} else {
-				delete(o, "sslrootcert")
+				delete(o, paramSSLRootCert)
 			}
 		}
 	case "verify-ca":
@@ -222,11 +222,14 @@ func ssl(o values) (func(net.Conn) (net.Conn, error), error) {
 		tlsConf.InsecureSkipVerify = true
 		verifyCaOnly = true
 	case "verify-full":
-		tlsConf.ServerName = o["host"]
+		tlsConf.ServerName = o[paramHost]
 	case "disable":
 		return nil, nil
 	default:
-		return nil, fmterrorf(`unsupported sslmode %q; only "require" (default), "verify-full", "verify-ca", and "disable" supported`, mode)
+		return nil, fmterrorf(
+			`unsupported sslmode %q; only "require" (default), "verify-full", "verify-ca", and "disable" supported`,
+			mode,
+		)
 	}
 
 	err := sslClientCertificates(&tlsConf, o)
@@ -267,10 +270,10 @@ func sslClientCertificates(tlsConf *tls.Config, o values) error {
 		sslKeyBytes  []byte
 		err          error
 	)
-	sslInLine := o["sslinline"]
+	sslInLine := o[paramSSLinLine]
 	if sslInLine == "true" {
-		sslCertBytes = []byte(o["sslcert"])
-		sslKeyBytes = []byte(o["sslkey"])
+		sslCertBytes = []byte(o[paramSSLCert])
+		sslKeyBytes = []byte(o[paramSSLKey])
 		return nil
 	} else {
 		// user.Current() might fail when cross-compiling. We have to ignore the
@@ -281,7 +284,7 @@ func sslClientCertificates(tlsConf *tls.Config, o values) error {
 		// In libpq, the client certificate is only loaded if the setting is not blank.
 		//
 		// https://github.com/postgres/postgres/blob/REL9_6_2/src/interfaces/libpq/fe-secure-openssl.c#L1036-L1037
-		sslCert := o["sslcert"]
+		sslCert := o[paramSSLCert]
 		if len(sslCert) == 0 && user != nil {
 			sslCert = path.Join(user.HomeDir, ".postgresql", "postgresql.crt")
 		}
@@ -299,7 +302,7 @@ func sslClientCertificates(tlsConf *tls.Config, o values) error {
 		// In libpq, the ssl key is only loaded if the setting is not blank.
 		//
 		// https://github.com/postgres/postgres/blob/REL9_6_2/src/interfaces/libpq/fe-secure-openssl.c#L1123-L1222
-		sslKey := o["sslkey"]
+		sslKey := o[paramSSLKey]
 		if len(sslKey) == 0 && user != nil {
 			sslKey = path.Join(user.HomeDir, ".postgresql", "postgresql.key")
 		}
@@ -323,7 +326,7 @@ func sslClientCertificates(tlsConf *tls.Config, o values) error {
 		return fmterrorf("ssh: no key found")
 	}
 	if x509.IsEncryptedPEMBlock(block) {
-		sslPassword, ok := o["sslpassword"]
+		sslPassword, ok := o[paramSSLPassword]
 		if !ok {
 			return fmterrorf("sslpassword is invalid")
 		}
@@ -353,10 +356,10 @@ func sslCertificateAuthority(tlsConf *tls.Config, o values) error {
 	// In libpq, the root certificate is only loaded if the setting is not blank.
 	//
 	// https://github.com/postgres/postgres/blob/REL9_6_2/src/interfaces/libpq/fe-secure-openssl.c#L950-L951
-	if sslrootcert := o["sslrootcert"]; len(sslrootcert) > 0 {
+	if sslrootcert := o[paramSSLRootCert]; len(sslrootcert) > 0 {
 		tlsConf.RootCAs = x509.NewCertPool()
 
-		sslinline := o["sslinline"]
+		sslinline := o[paramSSLinLine]
 
 		var cert []byte
 		if sslinline == "true" {

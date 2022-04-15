@@ -49,7 +49,7 @@ func TestParseConfig(t *testing.T) {
 				},
 				RuntimeParams: map[string]string{},
 				Fallbacks: []*FallbackConfig{
-					&FallbackConfig{
+					{
 						Host:      "localhost",
 						Port:      5432,
 						TLSConfig: nil,
@@ -71,7 +71,7 @@ func TestParseConfig(t *testing.T) {
 				},
 				RuntimeParams: map[string]string{},
 				Fallbacks: []*FallbackConfig{
-					&FallbackConfig{
+					{
 						Host:      "localhost",
 						Port:      5432,
 						TLSConfig: nil,
@@ -94,7 +94,7 @@ func TestParseConfig(t *testing.T) {
 				},
 				RuntimeParams: map[string]string{},
 				Fallbacks: []*FallbackConfig{
-					&FallbackConfig{
+					{
 						Host:      "localhost",
 						Port:      5432,
 						TLSConfig: nil,
@@ -127,7 +127,7 @@ func TestParseConfig(t *testing.T) {
 				TLSConfig:     nil,
 				RuntimeParams: map[string]string{},
 				Fallbacks: []*FallbackConfig{
-					&FallbackConfig{
+					{
 						Host: "localhost",
 						Port: 5432,
 						TLSConfig: &tls.Config{
@@ -152,7 +152,7 @@ func TestParseConfig(t *testing.T) {
 				},
 				RuntimeParams: map[string]string{},
 				Fallbacks: []*FallbackConfig{
-					&FallbackConfig{
+					{
 						Host:      "localhost",
 						Port:      5432,
 						TLSConfig: nil,
@@ -251,6 +251,19 @@ func TestParseConfig(t *testing.T) {
 				User:          "gaussdb",
 				Password:      "secret",
 				Host:          "localhost",
+				Port:          5432,
+				Database:      "mydb",
+				TLSConfig:     nil,
+				RuntimeParams: map[string]string{},
+			},
+		},
+		{
+			name:       "database url socket host",
+			connString: "postgres://gaussdb:secret@localhost:5432/mydb?sslmode=disable&host=/tmp",
+			config: &Config{
+				User:          "gaussdb",
+				Password:      "secret",
+				Host:          "/tmp",
 				Port:          5432,
 				Database:      "mydb",
 				TLSConfig:     nil,
@@ -420,12 +433,12 @@ func TestParseConfig(t *testing.T) {
 				TLSConfig:     nil,
 				RuntimeParams: map[string]string{},
 				Fallbacks: []*FallbackConfig{
-					&FallbackConfig{
+					{
 						Host:      "bar",
 						Port:      5432,
 						TLSConfig: nil,
 					},
-					&FallbackConfig{
+					{
 						Host:      "baz",
 						Port:      5432,
 						TLSConfig: nil,
@@ -445,12 +458,12 @@ func TestParseConfig(t *testing.T) {
 				TLSConfig:     nil,
 				RuntimeParams: map[string]string{},
 				Fallbacks: []*FallbackConfig{
-					&FallbackConfig{
+					{
 						Host:      "bar",
 						Port:      2,
 						TLSConfig: nil,
 					},
-					&FallbackConfig{
+					{
 						Host:      "baz",
 						Port:      3,
 						TLSConfig: nil,
@@ -470,12 +483,12 @@ func TestParseConfig(t *testing.T) {
 				TLSConfig:     nil,
 				RuntimeParams: map[string]string{},
 				Fallbacks: []*FallbackConfig{
-					&FallbackConfig{
+					{
 						Host:      "bar",
 						Port:      5432,
 						TLSConfig: nil,
 					},
-					&FallbackConfig{
+					{
 						Host:      "baz",
 						Port:      5432,
 						TLSConfig: nil,
@@ -495,12 +508,12 @@ func TestParseConfig(t *testing.T) {
 				TLSConfig:     nil,
 				RuntimeParams: map[string]string{},
 				Fallbacks: []*FallbackConfig{
-					&FallbackConfig{
+					{
 						Host:      "bar",
 						Port:      2,
 						TLSConfig: nil,
 					},
-					&FallbackConfig{
+					{
 						Host:      "baz",
 						Port:      3,
 						TLSConfig: nil,
@@ -522,29 +535,30 @@ func TestParseConfig(t *testing.T) {
 				},
 				RuntimeParams: map[string]string{},
 				Fallbacks: []*FallbackConfig{
-					&FallbackConfig{
+					{
 						Host:      "foo",
 						Port:      5432,
 						TLSConfig: nil,
 					},
-					&FallbackConfig{
+					{
 						Host: "bar",
 						Port: 5432,
 						TLSConfig: &tls.Config{
 							InsecureSkipVerify: true,
 						}},
-					&FallbackConfig{
+					{
 						Host:      "bar",
 						Port:      5432,
 						TLSConfig: nil,
 					},
-					&FallbackConfig{
+					{
 						Host: "baz",
 						Port: 5432,
 						TLSConfig: &tls.Config{
 							InsecureSkipVerify: true,
-						}},
-					&FallbackConfig{
+						},
+					},
+					{
 						Host:      "baz",
 						Port:      5432,
 						TLSConfig: nil,
@@ -553,7 +567,7 @@ func TestParseConfig(t *testing.T) {
 			},
 		},
 		{
-			name:       "target_session_attrs",
+			name:       paramTargetSessionAttrs,
 			connString: "postgres://gaussdb:secret@localhost:5432/mydb?sslmode=disable&target_session_attrs=read-write",
 			config: &Config{
 				User:          "gaussdb",
@@ -569,13 +583,15 @@ func TestParseConfig(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config, err := ParseConfig(tt.connString)
-			if !assert.Nilf(t, err, "Test %d (%s)", i, tt.name) {
-				return
-			}
-			assertConfigsEqual(t, tt.config, config, fmt.Sprintf("Test %d (%s)", i, tt.name))
-		})
+		t.Run(
+			tt.name, func(t *testing.T) {
+				config, err := ParseConfig(tt.connString)
+				if !assert.Nilf(t, err, "Test %d (%s)", i, tt.name) {
+					return
+				}
+				assertConfigsEqual(t, tt.config, config, fmt.Sprintf("Test %d (%s)", i, tt.name))
+			},
+		)
 
 	}
 }
@@ -646,20 +662,39 @@ func assertConfigsEqual(t *testing.T, expected, actual *Config, testName string)
 
 	if assert.Equalf(t, expected.TLSConfig == nil, actual.TLSConfig == nil, "%s - TLSConfig", testName) {
 		if expected.TLSConfig != nil {
-			assert.Equalf(t, expected.TLSConfig.InsecureSkipVerify, actual.TLSConfig.InsecureSkipVerify, "%s - TLSConfig InsecureSkipVerify", testName)
-			assert.Equalf(t, expected.TLSConfig.ServerName, actual.TLSConfig.ServerName, "%s - TLSConfig ServerName", testName)
+			assert.Equalf(
+				t, expected.TLSConfig.InsecureSkipVerify, actual.TLSConfig.InsecureSkipVerify,
+				"%s - TLSConfig InsecureSkipVerify", testName,
+			)
+			assert.Equalf(
+				t, expected.TLSConfig.ServerName, actual.TLSConfig.ServerName, "%s - TLSConfig ServerName", testName,
+			)
 		}
 	}
 
 	if assert.Equalf(t, len(expected.Fallbacks), len(actual.Fallbacks), "%s - Fallbacks", testName) {
 		for i := range expected.Fallbacks {
-			assert.Equalf(t, expected.Fallbacks[i].Host, actual.Fallbacks[i].Host, "%s - Fallback %d - Host", testName, i)
-			assert.Equalf(t, expected.Fallbacks[i].Port, actual.Fallbacks[i].Port, "%s - Fallback %d - Port", testName, i)
+			assert.Equalf(
+				t, expected.Fallbacks[i].Host, actual.Fallbacks[i].Host, "%s - Fallback %d - Host", testName, i,
+			)
+			assert.Equalf(
+				t, expected.Fallbacks[i].Port, actual.Fallbacks[i].Port, "%s - Fallback %d - Port", testName, i,
+			)
 
-			if assert.Equalf(t, expected.Fallbacks[i].TLSConfig == nil, actual.Fallbacks[i].TLSConfig == nil, "%s - Fallback %d - TLSConfig", testName, i) {
+			if assert.Equalf(
+				t, expected.Fallbacks[i].TLSConfig == nil, actual.Fallbacks[i].TLSConfig == nil,
+				"%s - Fallback %d - TLSConfig", testName, i,
+			) {
 				if expected.Fallbacks[i].TLSConfig != nil {
-					assert.Equalf(t, expected.Fallbacks[i].TLSConfig.InsecureSkipVerify, actual.Fallbacks[i].TLSConfig.InsecureSkipVerify, "%s - Fallback %d - TLSConfig InsecureSkipVerify", testName)
-					assert.Equalf(t, expected.Fallbacks[i].TLSConfig.ServerName, actual.Fallbacks[i].TLSConfig.ServerName, "%s - Fallback %d - TLSConfig ServerName", testName)
+					assert.Equalf(
+						t, expected.Fallbacks[i].TLSConfig.InsecureSkipVerify,
+						actual.Fallbacks[i].TLSConfig.InsecureSkipVerify,
+						"%s - Fallback %d - TLSConfig InsecureSkipVerify", testName,
+					)
+					assert.Equalf(
+						t, expected.Fallbacks[i].TLSConfig.ServerName, actual.Fallbacks[i].TLSConfig.ServerName,
+						"%s - Fallback %d - TLSConfig ServerName", testName,
+					)
 				}
 			}
 		}
@@ -679,7 +714,9 @@ func TestParseConfigEnvLibpq(t *testing.T) {
 		}
 	}
 
-	pgEnvvars := []string{"PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD", "PGAPPNAME", "PGSSLMODE", "PGCONNECT_TIMEOUT"}
+	pgEnvvars := []string{
+		"PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD", "PGAPPNAME", "PGSSLMODE", "PGCONNECT_TIMEOUT",
+	}
 
 	savedEnv := make(map[string]string)
 	for _, n := range pgEnvvars {
@@ -712,7 +749,7 @@ func TestParseConfigEnvLibpq(t *testing.T) {
 				},
 				RuntimeParams: map[string]string{},
 				Fallbacks: []*FallbackConfig{
-					&FallbackConfig{
+					{
 						Host:      "123.123.123.123",
 						Port:      5432,
 						TLSConfig: nil,
@@ -740,7 +777,9 @@ func TestParseConfigEnvLibpq(t *testing.T) {
 				Password:       "baz",
 				ConnectTimeout: 10 * time.Second,
 				TLSConfig:      nil,
-				RuntimeParams:  map[string]string{"application_name": "conntest"},
+				RuntimeParams: map[string]string{
+					"application_name": "conntest",
+				},
 			},
 		},
 	}
@@ -791,7 +830,7 @@ func TestParseConfigReadsPgPassfile(t *testing.T) {
 	actual, err := ParseConfig(connString)
 	assert.NoError(t, err)
 
-	assertConfigsEqual(t, expected, actual, "passfile")
+	assertConfigsEqual(t, expected, actual, paramPassFile)
 }
 
 func TestParseConfigReadsPgServiceFile(t *testing.T) {
@@ -803,7 +842,8 @@ func TestParseConfigReadsPgServiceFile(t *testing.T) {
 	defer tf.Close()
 	defer os.Remove(tf.Name())
 
-	_, err = tf.Write([]byte(`
+	_, err = tf.Write(
+		[]byte(`
 [abc]
 host=abc.example.com
 port=9999
@@ -815,7 +855,8 @@ host = def.example.com
 dbname = defdb
 user = defuser
 application_name = spaced string
-`))
+`),
+	)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -836,7 +877,7 @@ application_name = spaced string
 				},
 				RuntimeParams: map[string]string{},
 				Fallbacks: []*FallbackConfig{
-					&FallbackConfig{
+					{
 						Host:      "abc.example.com",
 						Port:      9999,
 						TLSConfig: nil,
@@ -855,9 +896,11 @@ application_name = spaced string
 				TLSConfig: &tls.Config{
 					InsecureSkipVerify: true,
 				},
-				RuntimeParams: map[string]string{"application_name": "spaced string"},
+				RuntimeParams: map[string]string{
+					"application_name": "spaced string",
+				},
 				Fallbacks: []*FallbackConfig{
-					&FallbackConfig{
+					{
 						Host:      "def.example.com",
 						Port:      5432,
 						TLSConfig: nil,
@@ -866,8 +909,10 @@ application_name = spaced string
 			},
 		},
 		{
-			name:       "conn string has precedence",
-			connString: fmt.Sprintf("postgres://other.example.com:7777/?servicefile=%s&service=%s&sslmode=disable", tf.Name(), "abc"),
+			name: "conn string has precedence",
+			connString: fmt.Sprintf(
+				"postgres://other.example.com:7777/?servicefile=%s&service=%s&sslmode=disable", tf.Name(), "abc",
+			),
 			config: &Config{
 				Host:          "other.example.com",
 				Database:      "abcdb",
@@ -894,7 +939,7 @@ func TestParseConfigExtractsMinReadBufferSize(t *testing.T) {
 
 	config, err := ParseConfig("min_read_buffer_size=0")
 	require.NoError(t, err)
-	_, present := config.RuntimeParams["min_read_buffer_size"]
+	_, present := config.RuntimeParams[paramMinReadBufferSize]
 	require.False(t, present)
 
 	// The buffer size is internal so there isn't much that can be done to test it other than see that the runtime param

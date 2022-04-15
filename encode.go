@@ -7,6 +7,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/ianaindex"
+	"golang.org/x/text/transform"
+	"io/ioutil"
 	"math"
 	"regexp"
 	"strconv"
@@ -17,7 +21,22 @@ import (
 	"gitee.com/opengauss/openGauss-connector-go-pq/oid"
 )
 
+var (
+	serverEncodingMap = map[string]string{
+		"UTF8": "UTF-8",
+	}
+)
+
 var time2400Regex = regexp.MustCompile(`^(24:00(?::00(?:\.0+)?)?)(?:[Z+-].*)?$`)
+
+func getEncoding(name string) (encoding.Encoding, error) {
+	name = strings.ToUpper(name)
+	alias, ok := serverEncodingMap[name]
+	if !ok {
+		alias = name
+	}
+	return ianaindex.MIB.Encoding(alias)
+}
 
 func binaryEncode(parameterStatus *parameterStatus, x interface{}) []byte {
 	switch v := x.(type) {
@@ -35,17 +54,27 @@ func encode(parameterStatus *parameterStatus, x interface{}, pgtypOid oid.Oid) [
 	case float64:
 		return strconv.AppendFloat(nil, v, 'f', -1, 64)
 	case []byte:
-		if pgtypOid == oid.T_bytea {
+		switch pgtypOid {
+		case oid.T_bytea:
 			return encodeBytea(parameterStatus.serverVersion, v)
+		case oid.T_blob:
+			result := make([]byte, hex.EncodedLen(len(v)))
+			hex.Encode(result, v)
+			return result
+		default:
+			return v
 		}
-
-		return v
 	case string:
-		if pgtypOid == oid.T_bytea {
+		switch pgtypOid {
+		case oid.T_bytea:
 			return encodeBytea(parameterStatus.serverVersion, []byte(v))
+		case oid.T_blob:
+			result := make([]byte, hex.EncodedLen(len(v)))
+			hex.Encode(result, []byte(v))
+			return result
+		default:
+			return []byte(v)
 		}
-
-		return []byte(v)
 	case bool:
 		return strconv.AppendBool(nil, v)
 	case time.Time:
@@ -54,11 +83,47 @@ func encode(parameterStatus *parameterStatus, x interface{}, pgtypOid oid.Oid) [
 	default:
 		errorf("encode: unknown type for %T", v)
 	}
-
 	panic("not reached")
 }
 
+// encodeByte 字符编码解码
+func encodeByte(parameterStatus *parameterStatus, buf []byte) []byte {
+	if parameterStatus.encoding == nil {
+		return buf
+	}
+	tmp, err := ioutil.ReadAll(
+		transform.NewReader(bytes.NewReader(buf), parameterStatus.encoding.NewEncoder()),
+	)
+	if err != nil {
+		return buf
+	}
+	return tmp
+}
+
+func encodeText(parameterStatus *parameterStatus, s string) []byte {
+	var b []byte
+	buf := appendEscapedText(b, s)
+	// return encodeByte(parameterStatus, buf)
+	return buf
+}
+
+func decodeHexToBlob(s []byte) []byte {
+	n, err := hex.Decode(s, s)
+	if err != nil {
+		errorf("%s", err)
+	}
+	return s[:n]
+}
+
 func decode(parameterStatus *parameterStatus, s []byte, typ oid.Oid, f format) interface{} {
+	if parameterStatus.encoding != nil {
+		tmp, _ := ioutil.ReadAll(
+			transform.NewReader(bytes.NewReader(s), parameterStatus.encoding.NewDecoder()),
+		)
+		s = tmp
+
+	}
+
 	switch f {
 	case formatBinary:
 		return binaryDecode(parameterStatus, s, typ)
@@ -85,7 +150,8 @@ func binaryDecode(parameterStatus *parameterStatus, s []byte, typ oid.Oid) inter
 			panic(err)
 		}
 		return b
-
+	case oid.T_blob:
+		return decodeHexToBlob(s)
 	default:
 		errorf("don't know how to decode binary parameter of type %d", uint32(typ))
 	}
@@ -128,6 +194,8 @@ func textDecode(parameterStatus *parameterStatus, s []byte, typ oid.Oid) interfa
 			errorf("%s", err)
 		}
 		return f
+	case oid.T_blob:
+		return decodeHexToBlob(s)
 	}
 
 	return s
@@ -143,8 +211,14 @@ func appendEncodedText(parameterStatus *parameterStatus, buf []byte, x interface
 		return strconv.AppendFloat(buf, v, 'f', -1, 64)
 	case []byte:
 		encodedBytea := encodeBytea(parameterStatus.serverVersion, v)
+		// encodedBytea = encodeByte(parameterStatus, encodedBytea)
 		return appendEscapedText(buf, string(encodedBytea))
 	case string:
+		if parameterStatus.encoding != nil {
+			b := encodeText(parameterStatus, v)
+			result := append(buf, b...)
+			return result
+		}
 		return appendEscapedText(buf, v)
 	case bool:
 		return strconv.AppendBool(buf, v)
@@ -466,9 +540,11 @@ func ParseTimestamp(currentLocation *time.Location, str string) (time.Time, erro
 	if remainderIdx < len(str) {
 		return time.Time{}, fmt.Errorf("expected end of input, got %v", str[remainderIdx:])
 	}
-	t := time.Date(isoYear, time.Month(month), day,
+	t := time.Date(
+		isoYear, time.Month(month), day,
 		hour, minute, second, nanoSec,
-		globalLocationCache.getLocation(tzOff))
+		globalLocationCache.getLocation(tzOff),
+	)
 
 	if currentLocation != nil {
 		// Set the location of the returned Time based on the session's

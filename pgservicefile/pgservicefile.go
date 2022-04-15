@@ -15,13 +15,13 @@ type Service struct {
 	Settings map[string]string
 }
 
-type Servicefile struct {
+type ServiceFile struct {
 	Services       []*Service
 	servicesByName map[string]*Service
 }
 
 // GetService returns the named service.
-func (sf *Servicefile) GetService(name string) (*Service, error) {
+func (sf *ServiceFile) GetService(name string) (*Service, error) {
 	service, present := sf.servicesByName[name]
 	if !present {
 		return nil, errors.New("not found")
@@ -29,20 +29,20 @@ func (sf *Servicefile) GetService(name string) (*Service, error) {
 	return service, nil
 }
 
-// ReadServicefile reads the file at path and parses it into a Servicefile.
-func ReadServicefile(path string) (*Servicefile, error) {
+// ReadServiceFile reads the file at path and parses it into a Servicefile.
+func ReadServiceFile(path string) (*ServiceFile, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 
-	return ParseServicefile(f)
+	return ParseServiceFile(f)
 }
 
-// ParseServicefile reads r and parses it into a Servicefile.
-func ParseServicefile(r io.Reader) (*Servicefile, error) {
-	servicefile := &Servicefile{}
+// ParseServiceFile reads r and parses it into a Servicefile.
+func ParseServiceFile(r io.Reader) (*ServiceFile, error) {
+	serviceFile := &ServiceFile{}
 
 	var service *Service
 	scanner := bufio.NewScanner(r)
@@ -56,7 +56,7 @@ func ParseServicefile(r io.Reader) (*Servicefile, error) {
 			// ignore comments and empty lines
 		} else if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
 			service = &Service{Name: line[1 : len(line)-1], Settings: make(map[string]string)}
-			servicefile.Services = append(servicefile.Services, service)
+			serviceFile.Services = append(serviceFile.Services, service)
 		} else {
 			parts := strings.SplitN(line, "=", 2)
 			if len(parts) != 2 {
@@ -70,10 +70,10 @@ func ParseServicefile(r io.Reader) (*Servicefile, error) {
 		}
 	}
 
-	servicefile.servicesByName = make(map[string]*Service, len(servicefile.Services))
-	for _, service := range servicefile.Services {
-		servicefile.servicesByName[service.Name] = service
+	serviceFile.servicesByName = make(map[string]*Service, len(serviceFile.Services))
+	for _, service := range serviceFile.Services {
+		serviceFile.servicesByName[service.Name] = service
 	}
 
-	return servicefile, scanner.Err()
+	return serviceFile, scanner.Err()
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/hex"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"io"
 	"net"
 	"os"
@@ -855,12 +857,14 @@ func TestQueryRowBugWorkaround(t *testing.T) {
 
 	// Also test that simpleQuery()'s workaround works when the query fails
 	// after a row has been received.
-	rows, err := db.Query(`
+	rows, err := db.Query(
+		`
 select
 	(select generate_series(1, ss.i))
 from (select gs.i
       from generate_series(1, 2) gs(i)
-      order by gs.i limit 2) ss`)
+      order by gs.i limit 2) ss`,
+	)
 	if err != nil {
 		t.Fatalf("query failed: %s", err)
 	}
@@ -952,8 +956,10 @@ func TestReturning(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows, err := db.Query("INSERT INTO distributors (did, dname) VALUES (DEFAULT, 'XYZ Widgets') " +
-		"RETURNING did;")
+	rows, err := db.Query(
+		"INSERT INTO distributors (did, dname) VALUES (DEFAULT, 'XYZ Widgets') " +
+			"RETURNING did;",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1026,8 +1032,10 @@ func TestIssue196(t *testing.T) {
 	db := openTestConn(t)
 	defer db.Close()
 
-	row := db.QueryRow("SELECT float4 '0.10000122' = $1, float8 '35.03554004971999' = $2",
-		float32(0.10000122), float64(35.03554004971999))
+	row := db.QueryRow(
+		"SELECT float4 '0.10000122' = $1, float8 '35.03554004971999' = $2",
+		float32(0.10000122), float64(35.03554004971999),
+	)
 
 	var float4match, float8match bool
 	err := row.Scan(&float4match, &float8match)
@@ -1049,10 +1057,12 @@ func TestIssue282(t *testing.T) {
 	defer db.Close()
 
 	var searchPath string
-	err := db.QueryRow(`
+	err := db.QueryRow(
+		`
 		SET LOCAL search_path TO pg_catalog;
 		SET LOCAL search_path TO pg_catalog;
-		SHOW search_path`).Scan(&searchPath)
+		SHOW search_path`,
+	).Scan(&searchPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1152,7 +1162,7 @@ var envParseTests = []struct {
 }{
 	{
 		Env:      []string{"PGDATABASE=hello", "PGUSER=goodbye"},
-		Expected: map[string]string{"dbname": "hello", "user": "goodbye"},
+		Expected: map[string]string{"dbname": "hello", paramUser: "goodbye"},
 	},
 	{
 		Env:      []string{"PGDATESTYLE=ISO, MDY"},
@@ -1160,7 +1170,7 @@ var envParseTests = []struct {
 	},
 	{
 		Env:      []string{"PGCONNECT_TIMEOUT=30"},
-		Expected: map[string]string{"connect_timeout": "30"},
+		Expected: map[string]string{paramConnectTimeout: "30"},
 	},
 }
 
@@ -1258,16 +1268,20 @@ func TestNullAfterNonNull(t *testing.T) {
 func Test64BitErrorChecking(t *testing.T) {
 	defer func() {
 		if err := recover(); err != nil {
-			t.Fatal("panic due to 0xFFFFFFFF != -1 " +
-				"when int is 64 bits")
+			t.Fatal(
+				"panic due to 0xFFFFFFFF != -1 " +
+					"when int is 64 bits",
+			)
 		}
 	}()
 
 	db := openTestConn(t)
 	defer db.Close()
 
-	r, err := db.Query(`SELECT *
-FROM (VALUES (0::integer, NULL::text), (1, 'test string')) AS t;`)
+	r, err := db.Query(
+		`SELECT *
+FROM (VALUES (0::integer, NULL::text), (1, 'test string')) AS t;`,
+	)
 
 	if err != nil {
 		t.Fatal(err)
@@ -1388,12 +1402,16 @@ func TestRuntimeParameters(t *testing.T) {
 			t.Fatalf("%v: unexpected error: %v", test.conninfo, err)
 		}
 		if success != test.success {
-			t.Fatalf("unexpected outcome %v (was expecting %v) for conninfo \"%s\"",
-				success, test.success, test.conninfo)
+			t.Fatalf(
+				"unexpected outcome %v (was expecting %v) for conninfo \"%s\"",
+				success, test.success, test.conninfo,
+			)
 		}
 		if value != test.expected {
-			t.Fatalf("bad value for %s: got %s, want %s with conninfo \"%s\"",
-				test.param, value, test.expected, test.conninfo)
+			t.Fatalf(
+				"bad value for %s: got %s, want %s with conninfo \"%s\"",
+				test.param, value, test.expected, test.conninfo,
+			)
 		}
 	}
 }
@@ -1587,12 +1605,14 @@ func TestMultipleResult(t *testing.T) {
 	db := openTestConn(t)
 	defer db.Close()
 
-	rows, err := db.Query(`
+	rows, err := db.Query(
+		`
 		begin;
 			select * from information_schema.tables limit 1;
 			select * from information_schema.columns limit 2;
 		commit;
-	`)
+	`,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1685,4 +1705,218 @@ func TestCopyInStmtAffectedRows(t *testing.T) {
 
 	res.RowsAffected()
 	res.LastInsertId()
+}
+
+// func getDBCharset(db *sql.DB) (string, error) {
+// 	var dbCharset string
+// 	sqlText := "select pg_encoding_to_char(d.encoding) charset from pg_database d " +
+// 		"where datname = current_database()"
+// 	err := db.QueryRow(sqlText).Scan(&dbCharset)
+// 	return dbCharset, err
+// }
+
+// func TestGbkToUTF8Encoding(t *testing.T) {
+// 	os.Setenv(
+// 		"TEST_CONN_STRING",
+// 		"postgres://hongye:hongye@50@121.36.15.2:55448/hongye_gbk?sslmode=disable"+
+// 			"&loggerLevel=debug",
+// 	)
+// 	db := openTestConn(t)
+// 	defer db.Close()
+// 	var (
+// 		err error
+// 	)
+// 	// dbCharset, err := getDBCharset(db)
+// 	// if err != nil {
+// 	// 	t.Errorf("getDBCharset %v", err)
+// 	// }
+//
+// 	// if !strings.EqualFold(dbCharset, "UTF8") {
+// 	// 	t.Skip("Database Charset not utf8")
+// 	// 	return
+// 	// }
+// 	_, _ = db.Exec("drop table test_utf8_gbk")
+// 	_, err = db.Exec(
+// 		"CREATE TABLE test_utf8_gbk (" +
+// 			"id bigint," +
+// 			"COL_UTF8 varchar(100)," +
+// 			"COL_GBK varchar(100)" +
+// 			")",
+// 	)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	var clientCharset string
+// 	_ = db.QueryRow("show client_encoding").Scan(&clientCharset)
+// 	var (
+// 		id  = 1
+// 		str = "请求IC卡系统响应"
+// 	)
+//
+// 	gbkEnc, err := ianaindex.MIB.Encoding("GBk")
+// 	if err != nil {
+// 		t.Errorf(`%+v`, err)
+// 		return
+// 	}
+// 	tmp, err := ioutil.ReadAll(
+// 		transform.NewReader(bytes.NewReader([]byte(str)), gbkEnc.NewEncoder()),
+// 	)
+// 	if err != nil {
+// 		t.Errorf(`%+v`, err)
+// 		return
+// 	}
+// 	gbkStr := string(tmp)
+//
+// 	utf8Enc, err := ianaindex.MIB.Encoding("UTF-8")
+// 	if err != nil {
+// 		t.Errorf(`%+v`, err)
+// 		return
+// 	}
+// 	tmp, err = ioutil.ReadAll(
+// 		transform.NewReader(bytes.NewReader([]byte(gbkStr)), utf8Enc.NewEncoder()),
+// 	)
+// 	if err != nil {
+// 		t.Errorf(`%+v`, err)
+// 		return
+// 	}
+// 	gbkUtf8Str := string(tmp)
+// 	_, err = db.Exec(
+// 		"insert into test_utf8_gbk (id,COL_UTF8,COL_GBK) values (:1,:2,:3)", id, str, gbkStr,
+// 	)
+// 	if err != nil {
+// 		t.Error(err)
+// 		return
+// 	}
+// 	// _, err = stmt.Exec(id, str, gbkStr)
+// 	// if err != nil {
+// 	// 	t.Error(err)
+// 	// 	return
+// 	// }
+// 	tx, err := db.Begin()
+// 	stmt, err := tx.Prepare("copy test_utf8_gbk(id,COL_UTF8,COL_GBK) from stdin")
+// 	if err != nil {
+// 		t.Error(err)
+// 		return
+// 	}
+//
+// 	if _, err = stmt.Exec(id+1, str, gbkStr); err != nil {
+// 		t.Error(err)
+// 		return
+// 	}
+// 	if _, err := stmt.Exec(); err != nil {
+// 		t.Error(err)
+// 		return
+// 	}
+// 	_ = tx.Commit()
+//
+// 	os.Setenv(
+// 		"TEST_CONN_STRING",
+// 		"postgres://hongye:hongye@50@121.36.15.2:55448/hongye_gbk?sslmode=disable"+
+// 			"&loggerLevel=debug",
+// 	)
+// 	db1 := openTestConn(t)
+// 	defer db1.Close()
+// 	_ = db1.QueryRow("show client_encoding").Scan(&clientCharset)
+// 	rows, err := db1.Query("select id,COL_UTF8,COL_GBK from test_utf8_gbk")
+// 	if err != nil {
+// 		t.Error(err)
+// 		return
+// 	}
+// 	for rows.Next() {
+// 		var id, colUtf8, colGbk string
+// 		if err := rows.Scan(&id, &colUtf8, &colGbk); err != nil {
+// 			t.Error(err)
+// 			return
+// 		}
+// 		fmt.Printf("%s %s(%x) %s(%x)\n", id, colUtf8, colUtf8, colGbk, colGbk)
+// 		assert.Equal(t, gbkUtf8Str, colGbk)
+// 	}
+// }
+//
+func Test_Clob_Text_Blob_Bytea(t *testing.T) {
+	db := openTestConn(t)
+	defer db.Close()
+	var clientCharset string
+	_ = db.QueryRow("show client_encoding").Scan(&clientCharset)
+	fmt.Println(clientCharset)
+
+	var err error
+	_, _ = db.Exec("drop table Table_Blob_Bytea")
+	if _, err = db.Exec(
+		"create table Table_Blob_Bytea(id bigint,c_blob blob,c_bytea bytea," +
+			"c_clob clob,c_text text)",
+	); err != nil {
+		t.Error(err)
+		return
+	}
+
+	var ab string = "我是中国人"
+	result := make([]byte, hex.EncodedLen(len(ab)))
+	hex.Encode(result, []byte(ab))
+	sqlText := "insert into Table_Blob_Bytea (id,c_blob,c_bytea,c_clob,c_text) values (:1,:2,:3,:4,:5)"
+	if _, err = db.Exec(
+		sqlText,
+		1,
+		ab, []byte(ab),
+		ab, "db.Exec",
+	); err != nil {
+		t.Error(err)
+		return
+	}
+
+	stmt, err := db.Prepare(sqlText)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	_, err = stmt.Exec(
+		2,
+		[]byte(ab), ab,
+		ab, "stmt.Exec",
+	)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer tx.Rollback()
+	st, err := tx.Prepare("copy Table_Blob_Bytea(id,c_blob,c_bytea,c_clob,c_text) from STDIN")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	_, err = st.Exec(3, string(result), []byte(ab), ab, "copy Exec")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	_, err = st.Exec()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = tx.Commit()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	rows, err := db.Query("select * from Table_Blob_Bytea")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	for rows.Next() {
+		var id, cBlob, cBytes, cClob, cText string
+		if err := rows.Scan(&id, &cBlob, &cBytes, &cClob, &cText); err != nil {
+			t.Error(err)
+			return
+		}
+		assert.Equal(t, ab, cBlob)
+		fmt.Println(id, cBlob, cBytes, cClob, cText)
+	}
 }

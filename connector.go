@@ -171,8 +171,10 @@ func (c *Connector) connect(ctx context.Context, config *Config) (cn *conn, err 
 	}
 
 	if len(fallbackConfigs) == 0 {
-		return nil, &connectError{config: config, msg: "hostname resolving error",
-			err: errors.New("ip addr wasn't found")}
+		return nil, &connectError{
+			config: config, msg: "hostname resolving error",
+			err: errors.New("ip addr wasn't found"),
+		}
 	}
 	for _, fc := range fallbackConfigs {
 
@@ -211,15 +213,20 @@ func (c *Connector) connect(ctx context.Context, config *Config) (cn *conn, err 
 	return cn, nil
 }
 
-func (c *Connector) connectFallbackConfig(ctx context.Context, config *Config, fallbackConfig *FallbackConfig) (cn *conn, err error) {
+func (c *Connector) connectFallbackConfig(
+	ctx context.Context, config *Config, fallbackConfig *FallbackConfig,
+) (cn *conn, err error) {
 	cn = &conn{
 		config:         config,
 		logLevel:       config.LogLevel,
 		logger:         config.Logger,
 		fallbackConfig: fallbackConfig,
 	}
-
-	cn.log(ctx, LogLevelInfo, "dialing server", map[string]interface{}{"host": fallbackConfig.Host, "port": fallbackConfig.Port})
+	cn.scratch = make([]byte, config.minReadBufferSize)
+	cn.log(
+		ctx, LogLevelInfo, "dialing server",
+		map[string]interface{}{paramHost: fallbackConfig.Host, paramPort: fallbackConfig.Port},
+	)
 	network, address := NetworkAddress(fallbackConfig.Host, fallbackConfig.Port)
 	cn.c, err = config.DialFunc(ctx, network, address)
 	if err != nil {
@@ -256,11 +263,13 @@ func expandWithIPs(ctx context.Context, lookupFn LookupFunc, fallbacks []*Fallba
 	for _, fb := range fallbacks {
 		// skip resolve for unix sockets
 		if strings.HasPrefix(fb.Host, "/") {
-			configs = append(configs, &FallbackConfig{
-				Host:      fb.Host,
-				Port:      fb.Port,
-				TLSConfig: fb.TLSConfig,
-			})
+			configs = append(
+				configs, &FallbackConfig{
+					Host:      fb.Host,
+					Port:      fb.Port,
+					TLSConfig: fb.TLSConfig,
+				},
+			)
 
 			continue
 		}
@@ -271,11 +280,13 @@ func expandWithIPs(ctx context.Context, lookupFn LookupFunc, fallbacks []*Fallba
 		}
 
 		for _, ip := range ips {
-			configs = append(configs, &FallbackConfig{
-				Host:      ip,
-				Port:      fb.Port,
-				TLSConfig: fb.TLSConfig,
-			})
+			configs = append(
+				configs, &FallbackConfig{
+					Host:      ip,
+					Port:      fb.Port,
+					TLSConfig: fb.TLSConfig,
+				},
+			)
 		}
 	}
 

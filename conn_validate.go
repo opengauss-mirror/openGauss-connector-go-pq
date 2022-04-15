@@ -17,8 +17,12 @@ const (
 )
 
 func validateConnectTargetSessionAttrsTransaction(cn *conn, expectedStatus string) (bool, error) {
-	cn.log(context.Background(), LogLevelDebug, "check transaction_read_only", map[string]interface{}{"sql": showTransactionReadOnly,
-		"host": cn.config.Host, "port": cn.config.Port, "target_session_attrs": cn.config.targetSessionAttrs})
+	cn.log(
+		context.Background(), LogLevelDebug, "Check server is transaction_read_only ?", map[string]interface{}{
+			"sql":     showTransactionReadOnly,
+			paramHost: cn.config.Host, paramPort: cn.config.Port, paramTargetSessionAttrs: cn.config.targetSessionAttrs,
+		},
+	)
 	inReRows, err := cn.query(showTransactionReadOnly, nil)
 	defer inReRows.Close()
 	var dbTranReadOnly string
@@ -29,8 +33,12 @@ func validateConnectTargetSessionAttrsTransaction(cn *conn, expectedStatus strin
 		return false, err
 	}
 	readOnly := lastCols[0].(string)
-	cn.log(context.Background(), LogLevelDebug, "check transaction_read_only", map[string]interface{}{"transaction_read_only": readOnly,
-		"host": cn.config.Host, "port": cn.config.Port})
+	cn.log(
+		context.Background(), LogLevelDebug, "Check server is readOnly ?", map[string]interface{}{
+			"readOnly": readOnly,
+			paramHost:  cn.config.Host, paramPort: cn.config.Port,
+		},
+	)
 	if strings.EqualFold(readOnly, expectedStatus) {
 		return true, nil
 	}
