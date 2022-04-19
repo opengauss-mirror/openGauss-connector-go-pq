@@ -528,8 +528,8 @@ func (cn *conn) errRecover(err *error) {
 type connectError struct {
 	config         *Config
 	msg            string
-	fallbackConfig *FallbackConfig
 	err            error
+	fallbackConfig *FallbackConfig
 }
 
 func (e *connectError) Error() string {

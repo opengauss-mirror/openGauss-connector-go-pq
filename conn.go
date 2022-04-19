@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"golang.org/x/text/encoding"
 	"io"
 	"net"
 	"strconv"
@@ -52,6 +53,12 @@ const (
 	Sha256Password = 2
 
 	Sm3Password = 3
+
+	ClientEncoding        = "client_encoding"
+	ServerEncoding        = "server_encoding"
+	ServerVersion         = "server_version"
+	TimeZone              = "TimeZone"
+	DefaultClientEncoding = "UTF-8"
 )
 
 type parameterStatus struct {
@@ -62,6 +69,14 @@ type parameterStatus struct {
 	// the current location based on the TimeZone value of the session, if
 	// available
 	currentLocation *time.Location
+
+	// client_encoding
+	clientEncoding string
+	serverEncoding string
+	// db charset
+	dbCharset string
+	encoding  encoding.Encoding
+	decoding  encoding.Encoding
 }
 
 type transactionStatus byte
@@ -96,7 +111,7 @@ type conn struct {
 	config         *Config
 	fallbackConfig *FallbackConfig
 	namei          int
-	scratch        [512]byte
+	scratch        []byte
 	txnStatus      transactionStatus
 	txnFinish      func()
 	// Save connection arguments to use during CancelRequest.
@@ -187,6 +202,12 @@ func (cn *conn) log(ctx context.Context, lvl LogLevel, msg string, data map[stri
 	}
 
 	cn.logger.Log(ctx, lvl, msg, data)
+}
+
+func (cn *conn) DebugLog(msg string, data map[string]interface{}) {
+	cn.log(
+		nil, LogLevelDebug, msg, data,
+	)
 }
 
 func (cn *conn) startTLS(tlsConfig *tls.Config) (err error) {
@@ -333,7 +354,6 @@ func (cn *conn) simpleExec(q string) (res driver.Result, commandTag string, err 
 	b := cn.writeBuf('Q')
 	b.string(q)
 	cn.send(b)
-
 	for {
 		t, r := cn.recv1()
 		switch t {
@@ -489,7 +509,11 @@ func decideColumnFormats(colTyps []fieldDesc, forceText bool) (colFmts []format,
 
 func (cn *conn) prepareTo(q, stmtName string) *stmt {
 	st := &stmt{cn: cn, name: stmtName}
-
+	cn.log(
+		nil, LogLevelDebug, "FE=> prepareTo", map[string]interface{}{
+			"stmtName": stmtName,
+		},
+	)
 	b := cn.writeBuf('P')
 	b.string(st.name)
 	b.string(q)
@@ -505,6 +529,15 @@ func (cn *conn) prepareTo(q, stmtName string) *stmt {
 	cn.readParseResponse()
 	st.paramTyps, st.colNames, st.colTyps = cn.readStatementDescribeResponse()
 	st.colFmts, st.colFmtData = decideColumnFormats(st.colTyps, cn.disablePreparedBinaryResult)
+	data := map[string]interface{}{
+		"paramTypes": oid.ConvertOidsToString(st.paramTyps),
+	}
+	if len(st.colNames) > 0 {
+		data["colNames"] = strings.Join(st.colNames, ",")
+	}
+	cn.log(
+		nil, LogLevelDebug, "<=BE prepareTo", data,
+	)
 	cn.readReadyForQuery()
 	return st
 }
@@ -564,6 +597,7 @@ func (cn *conn) query(query string, args []driver.Value) (_ *rows, err error) {
 	}
 
 	if cn.binaryParameters {
+		cn.log(nil, LogLevelDebug, "FE=> query binaryParameters", nil)
 		cn.sendBinaryModeQuery(query, args)
 
 		cn.readParseResponse()
@@ -597,6 +631,7 @@ func (cn *conn) Exec(query string, args []driver.Value) (res driver.Result, err 
 	}
 
 	if cn.binaryParameters {
+		cn.log(nil, LogLevelDebug, "FE=> Exec binaryParameters", nil)
 		cn.sendBinaryModeQuery(query, args)
 
 		cn.readParseResponse()
@@ -779,10 +814,10 @@ func (cn *conn) startup() {
 		w.string(v)
 	}
 	if cn.config.Database != "" {
-		w.string("database")
+		w.string(paramDatabase)
 		w.string(cn.config.Database)
 	}
-	w.string("user")
+	w.string(paramUser)
 	w.string(cn.config.User)
 
 	w.string("")
@@ -859,13 +894,13 @@ func (cn *conn) auth(r *readBuf) {
 
 		var token []byte
 
-		if spn, ok := cn.config.GssAPIParams["krbspn"]; ok {
+		if spn, ok := cn.config.GssAPIParams[paramKrbSpn]; ok {
 			// Use the supplied SPN if provided..
 			token, err = cli.GetInitTokenFromSpn(spn)
 		} else {
 			// Allow the kerberos service name to be overridden
 			service := "postgres"
-			if val, ok := cn.config.GssAPIParams["krbsrvname"]; ok {
+			if val, ok := cn.config.GssAPIParams[paramKrbSrvName]; ok {
 				service = val
 			}
 
@@ -884,7 +919,6 @@ func (cn *conn) auth(r *readBuf) {
 		cn.gss = cli
 
 	case AuthReqGssContinue: // GSSAPI continue
-
 		if cn.gss == nil {
 			errorf("GSSAPI protocol error")
 		}
@@ -897,9 +931,7 @@ func (cn *conn) auth(r *readBuf) {
 			w.bytes(tokOut)
 			cn.send(w)
 		}
-
 	case AuthReqSha256:
-
 		// 这里在openGauss为sha256加密办法，主要代码流程来自jdbc相关实现
 		passwordStoredMethod := r.int32()
 		digest := ""
@@ -951,8 +983,6 @@ func (cn *conn) auth(r *readBuf) {
 		} else {
 			errorf("The  password-stored method is not supported ,must be plain, md5 or sha256.")
 		}
-
-	// AUTH_REQ_MD5_SHA256
 	case AuthReqMd5Sha256:
 		random64code := string(r.next(64))
 		md5Salt := r.next(4)
@@ -1102,21 +1132,24 @@ func (st *stmt) exec(v []driver.Value) {
 
 	cn := st.cn
 	w := cn.writeBuf('B')
-	w.byte(0) // unnamed portal
+	// Message size w.wrap()
+	// Destination portal name.
+	w.byte(0) // unnamed portal End of portal name.
 	w.string(st.name)
-
+	// # of parameter format codes
 	if cn.binaryParameters {
+		cn.log(nil, LogLevelDebug, "FE=> exec binaryParameters", nil)
 		cn.sendBinaryParameters(w, v)
 	} else {
 		w.int16(0)
-		w.int16(len(v))
+		w.int16(len(v)) // # of parameter values
 		for i, x := range v {
 			if x == nil {
 				w.int32(-1)
 			} else {
 				b := encode(&cn.parameterStatus, x, st.paramTyps[i])
-				w.int32(len(b))
-				w.bytes(b)
+				w.int32(len(b)) // Parameter size
+				w.bytes(b)      // Parameter value
 			}
 		}
 	}
@@ -1259,6 +1292,12 @@ func (cn *conn) sendBinaryParameters(b *writeBuf, args []driver.Value) {
 			paramFormats[i] = 1
 		}
 	}
+	cn.log(
+		nil, LogLevelDebug, "FE=> sendBinaryParameters",
+		map[string]interface{}{
+			"paramFormats": fmt.Sprint(paramFormats),
+		},
+	)
 	if paramFormats == nil {
 		b.int16(0)
 	} else {
@@ -1284,7 +1323,7 @@ func (cn *conn) sendBinaryModeQuery(query string, args []driver.Value) {
 	if len(args) >= 65536 {
 		errorf("got %d parameters but PostgreSQL only supports 65535 parameters", len(args))
 	}
-
+	cn.log(nil, LogLevelDebug, "FE=> sendBinaryModeQuery", nil)
 	b := cn.writeBuf('P')
 	b.byte(0) // unnamed statement
 	b.string(query)
@@ -1312,23 +1351,70 @@ func (cn *conn) processParameterStatus(r *readBuf) {
 
 	param := r.string()
 	switch param {
-	case "server_version":
-		var major1 int
-		var major2 int
-		_, err = fmt.Sscanf(r.string(), "%d.%d", &major1, &major2)
+	case ServerVersion:
+		var (
+			major1 int
+			major2 int
+			major3 int
+		)
+		version := r.string()
+		_, err = fmt.Sscanf(version, "%d.%d.%d", &major1, &major2, major3)
 		if err == nil {
-			cn.parameterStatus.serverVersion = major1*10000 + major2*100
+			cn.parameterStatus.serverVersion = major1*10000 + major2*100 + major3
+			cn.DebugLog(
+				"<=BE ParameterStatus", map[string]interface{}{
+					ServerVersion: cn.parameterStatus.serverVersion,
+				},
+			)
 		}
 
-	case "TimeZone":
+	case TimeZone:
 		cn.parameterStatus.currentLocation, err = time.LoadLocation(r.string())
 		if err != nil {
 			cn.parameterStatus.currentLocation = nil
 		}
+		cn.DebugLog(
+			"<=BE ParameterStatus", map[string]interface{}{
+				TimeZone: cn.parameterStatus.currentLocation,
+			},
+		)
+	case ClientEncoding:
+		cn.parameterStatus.clientEncoding = r.string()
+		cn.DebugLog(
+			"<=BE ParameterStatus", map[string]interface{}{
+				ClientEncoding: cn.parameterStatus.clientEncoding,
+			},
+		)
+	case ServerEncoding:
 
+		cn.parameterStatus.serverEncoding = r.string()
+		cn.DebugLog(
+			"<=BE ParameterStatus", map[string]interface{}{
+				ServerEncoding: cn.parameterStatus.serverEncoding,
+			},
+		)
 	default:
+		// fmt.Println(param, r.string())
 		// ignore
 	}
+
+	// encodingName := DefaultClientEncoding
+
+	// if value, ok := cn.config.RuntimeParams[paramClientEncoding]; ok {
+	// 	if cn.config.allowEncodingChanges == "true" {
+	// 		encodingName = value
+	// 	}
+	// }
+	// encoding, err := getEncoding(encodingName)
+	// if err == nil {
+	// 	cn.parameterStatus.encoding = encoding
+	// 	cn.DebugLog(
+	// 		"<=BE ParameterStatus Encoding", map[string]interface{}{
+	// 			"alias": cn.parameterStatus.serverEncoding,
+	// 		},
+	// 	)
+	// }
+
 }
 
 func (cn *conn) processReadyForQuery(r *readBuf) {

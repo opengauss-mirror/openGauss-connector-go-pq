@@ -157,6 +157,7 @@ func (cn *conn) cancel(ctx context.Context) error {
 		can := conn{
 			c: c,
 		}
+		can.scratch = make([]byte, cn.config.minReadBufferSize)
 		if cn.fallbackConfig.TLSConfig != nil {
 			if err := cn.startTLS(cn.fallbackConfig.TLSConfig); err != nil {
 				cn.c.Close()

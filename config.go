@@ -16,6 +16,34 @@ import (
 	"time"
 )
 
+const (
+	paramClientEncoding              = "client_encoding"
+	paramAllowEncodingChanges        = "allow_encoding_changes"
+	paramLoggerLevel                 = "loggerLevel"
+	paramCpBufferSize                = "cp_buffer_size"
+	paramMinReadBufferSize           = "min_read_buffer_size"
+	paramTargetSessionAttrs          = "target_session_attrs"
+	paramHost                        = "host"
+	paramPort                        = "port"
+	paramDatabase                    = "database"
+	paramUser                        = "user"
+	paramPassword                    = "password"
+	paramPassFile                    = "passfile"
+	paramConnectTimeout              = "connect_timeout"
+	paramSSLMode                     = "sslmode"
+	paramSSLKey                      = "sslkey"
+	paramSSLCert                     = "sslcert"
+	paramSSLRootCert                 = "sslrootcert"
+	paramSSLinLine                   = "sslinline"
+	paramSSLPassword                 = "sslpassword"
+	paramService                     = "service"
+	paramKrbSrvName                  = "krbsrvname"
+	paramKrbSpn                      = "krbspn"
+	paramServiceFile                 = "servicefile"
+	paramDisablePreparedBinaryResult = "disable_prepared_binary_result"
+	paramApplicationName             = "application_name"
+)
+
 // Config is the settings used to establish a connection to a PostgreSQL server. It must be created by ParseConfig. A
 // manually initialized Config will cause ConnectConfig to panic.
 type Config struct {
@@ -34,6 +62,9 @@ type Config struct {
 	Fallbacks     []*FallbackConfig
 
 	targetSessionAttrs string
+	minReadBufferSize  int64 // The minimum size of the internal read buffer. Default 8192.
+	cpBufferSize       int64 // Defines the size of the copy buffer. Default 65535.
+
 	// ValidateConnect is called during a connection attempt after a successful authentication with the PostgreSQL server.
 	// It can be used to validate that the server is acceptable. If this returns an error the connection is closed and the next
 	// fallback config is tried. This allows implementing high availability behavior such as libpq does with target_session_attrs.
@@ -54,6 +85,18 @@ type Config struct {
 
 	Logger   Logger
 	LogLevel LogLevel
+
+	// When using the V3 protocol the driver monitors changes in certain server configuration parameters
+	// that should not be touched by end users.
+	// The client_encoding setting is set by the driver and should not be altered.
+	// If the driver detects a change it will abort the connection.
+	// There is one legitimate exception to this behaviour though,
+	// using the COPY command on a file residing on the server's filesystem.
+	// The only means of specifying the encoding of this file is by altering the client_encoding setting.
+	// The JDBC team considers this a failing of the COPY command and hopes to provide an alternate means of specifying
+	// the encoding in the future, but for now there is this URL parameter.
+	// Enable this only if you need to override the client encoding when doing a copy.
+	allowEncodingChanges string
 }
 
 // Copy returns a deep copy of the config that is safe to use and modify.
@@ -194,25 +237,42 @@ func ParseConfig(connString string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	settings := mergeSettings(defaultSettings, envSettings, connStringSettings)
-	if service, present := settings["service"]; present {
-		serviceSettings, err := parseServiceSettings(settings["servicefile"], service)
+	if service, present := settings[paramService]; present {
+		serviceSettings, err := parseServiceSettings(settings[paramServiceFile], service)
 		if err != nil {
 			return nil, &parseConfigError{connString: connString, msg: "failed to read service", err: err}
 		}
 		settings = mergeSettings(defaultSettings, envSettings, serviceSettings, connStringSettings)
 	}
 
+	minReadBufferSize, err := strconv.ParseInt(settings[paramMinReadBufferSize], 10, 32)
+	if err != nil {
+		return nil, &parseConfigError{connString: connString, msg: "cannot parse min_read_buffer_size", err: err}
+	}
+	if minReadBufferSize == 0 {
+		minReadBufferSize = 8192
+	}
+	cpBufferSize, err := strconv.ParseInt(settings[paramCpBufferSize], 10, 32)
+	if err != nil {
+		return nil, &parseConfigError{connString: connString, msg: "cannot parse cp_buffer_size", err: err}
+	}
+	if cpBufferSize == 0 {
+		cpBufferSize = 65535
+	}
 	config := &Config{
 		createdByParseConfig: true,
-		Database:             settings["database"],
-		User:                 settings["user"],
-		Password:             settings["password"],
+		Database:             settings[paramDatabase],
+		User:                 settings[paramUser],
+		Password:             settings[paramPassword],
 		RuntimeParams:        make(map[string]string),
+		minReadBufferSize:    minReadBufferSize,
+		cpBufferSize:         cpBufferSize,
 		// BuildFrontend:        makeDefaultBuildFrontendFunc(int(minReadBufferSize)),
 	}
 
-	if connectTimeoutSetting, present := settings["connect_timeout"]; present {
+	if connectTimeoutSetting, present := settings[paramConnectTimeout]; present {
 		connectTimeout, err := parseConnectTimeoutSetting(connectTimeoutSetting)
 		if err != nil {
 			return nil, &parseConfigError{connString: connString, msg: "invalid connect_timeout", err: err}
@@ -227,27 +287,29 @@ func ParseConfig(connString string) (*Config, error) {
 	config.LookupFunc = makeDefaultResolver().LookupHost
 
 	notRuntimeParams := map[string]struct{}{
-		"host":                           struct{}{},
-		"port":                           struct{}{},
-		"database":                       struct{}{},
-		"user":                           struct{}{},
-		"password":                       struct{}{},
-		"passfile":                       struct{}{},
-		"connect_timeout":                struct{}{},
-		"sslmode":                        struct{}{},
-		"sslkey":                         struct{}{},
-		"sslcert":                        struct{}{},
-		"sslrootcert":                    struct{}{},
-		"sslinline":                      struct{}{},
-		"sslpassword":                    struct{}{},
-		"target_session_attrs":           struct{}{},
-		"min_read_buffer_size":           struct{}{},
-		"service":                        struct{}{},
-		"krbsrvname":                     struct{}{},
-		"krbspn":                         struct{}{},
-		"servicefile":                    struct{}{},
-		"disable_prepared_binary_result": struct{}{},
-		"loggerLevel":                    struct{}{},
+		paramHost:                        {},
+		paramPort:                        {},
+		paramDatabase:                    {},
+		paramUser:                        {},
+		paramPassword:                    {},
+		paramPassFile:                    {},
+		paramConnectTimeout:              {},
+		paramSSLMode:                     {},
+		paramSSLKey:                      {},
+		paramSSLCert:                     {},
+		paramSSLRootCert:                 {},
+		paramSSLinLine:                   {},
+		paramSSLPassword:                 {},
+		paramTargetSessionAttrs:          {},
+		paramMinReadBufferSize:           {},
+		paramService:                     {},
+		paramKrbSrvName:                  {},
+		paramKrbSpn:                      {},
+		paramServiceFile:                 {},
+		paramDisablePreparedBinaryResult: {},
+		paramLoggerLevel:                 {},
+		paramCpBufferSize:                {},
+		paramAllowEncodingChanges:        {},
 	}
 
 	for k, v := range settings {
@@ -256,9 +318,9 @@ func ParseConfig(connString string) (*Config, error) {
 		}
 		config.RuntimeParams[k] = v
 	}
-	if loggerLevel, ok := settings["loggerLevel"]; ok {
+	if value, ok := settings[paramLoggerLevel]; ok {
 		var err error
-		config.LogLevel, err = LogLevelFromString(strings.ToLower(loggerLevel))
+		config.LogLevel, err = LogLevelFromString(strings.ToLower(value))
 		if err != nil {
 			return nil, err
 		}
@@ -266,11 +328,14 @@ func ParseConfig(connString string) (*Config, error) {
 			config.Logger = NewPrintfLogger(config.LogLevel)
 		}
 	}
+	if value, ok := settings[paramAllowEncodingChanges]; ok {
+		config.allowEncodingChanges = value
+	}
 
 	fallbacks := []*FallbackConfig{}
 
-	hosts := strings.Split(settings["host"], ",")
-	ports := strings.Split(settings["port"], ",")
+	hosts := strings.Split(settings[paramHost], ",")
+	ports := strings.Split(settings[paramPort], ",")
 	gssAPIParams, err := configGssAPI(settings)
 	if err != nil {
 		return nil, &parseConfigError{connString: connString, msg: "failed to configure GSSAPI", err: err}
@@ -303,11 +368,13 @@ func ParseConfig(connString string) (*Config, error) {
 		}
 
 		for _, tlsConfig := range tlsConfigs {
-			fallbacks = append(fallbacks, &FallbackConfig{
-				Host:      host,
-				Port:      port,
-				TLSConfig: tlsConfig,
-			})
+			fallbacks = append(
+				fallbacks, &FallbackConfig{
+					Host:      host,
+					Port:      port,
+					TLSConfig: tlsConfig,
+				},
+			)
 		}
 	}
 
@@ -316,19 +383,18 @@ func ParseConfig(connString string) (*Config, error) {
 	config.TLSConfig = fallbacks[0].TLSConfig
 	config.Fallbacks = fallbacks[1:]
 
-	passFile, err := pgpassfile.ReadPassfile(settings["passfile"])
+	passFile, err := pgpassfile.ReadPassfile(settings[paramPassFile])
 	if err == nil {
 		if config.Password == "" {
 			host := config.Host
 			if network, _ := NetworkAddress(config.Host, config.Port); network == "unix" {
 				host = "localhost"
 			}
-
 			config.Password = passFile.FindPassword(host, strconv.Itoa(int(config.Port)), config.Database, config.User)
 		}
 	}
 
-	switch tsa := settings["target_session_attrs"]; tsa {
+	switch tsa := settings[paramTargetSessionAttrs]; tsa {
 	case "read-write":
 		config.ValidateConnect = ValidateConnectTargetSessionAttrsReadWrite
 		config.targetSessionAttrs = tsa
@@ -344,7 +410,9 @@ func ParseConfig(connString string) (*Config, error) {
 	case "any", "prefer-standby":
 		// do nothing
 	default:
-		return nil, &parseConfigError{connString: connString, msg: fmt.Sprintf("unknown target_session_attrs value: %v", tsa)}
+		return nil, &parseConfigError{
+			connString: connString, msg: fmt.Sprintf("unknown target_session_attrs value: %v", tsa),
+		}
 	}
 	return config, nil
 }
@@ -365,28 +433,28 @@ func parseEnvSettings() map[string]string {
 	settings := make(map[string]string)
 
 	nameMap := map[string]string{
-		"PGHOST":               "host",
-		"PGPORT":               "port",
-		"PGDATABASE":           "database",
-		"PGUSER":               "user",
-		"PGPASSWORD":           "password",
-		"PGPASSFILE":           "passfile",
-		"PGAPPNAME":            "application_name",
-		"PGCONNECT_TIMEOUT":    "connect_timeout",
-		"PGSSLMODE":            "sslmode",
-		"PGSSLKEY":             "sslkey",
-		"PGSSLCERT":            "sslcert",
-		"PGSSLROOTCERT":        "sslrootcert",
-		"PGTARGETSESSIONATTRS": "target_session_attrs",
-		"PGSERVICE":            "service",
-		"PGSERVICEFILE":        "servicefile",
-		"PGLOGGERLEVEL":        "loggerLevel",
+		"PGHOST":               paramHost,
+		"PGPORT":               paramPort,
+		"PGDATABASE":           paramDatabase,
+		"PGUSER":               paramUser,
+		"PGPASSWORD":           paramPassword,
+		"PGPASSFILE":           paramPassFile,
+		"PGAPPNAME":            paramApplicationName,
+		"PGCONNECT_TIMEOUT":    paramConnectTimeout,
+		"PGSSLMODE":            paramSSLMode,
+		"PGSSLKEY":             paramSSLKey,
+		"PGSSLCERT":            paramSSLCert,
+		"PGSSLROOTCERT":        paramSSLRootCert,
+		"PGTARGETSESSIONATTRS": paramTargetSessionAttrs,
+		"PGSERVICE":            paramService,
+		"PGSERVICEFILE":        paramServiceFile,
+		"PGLOGGERLEVEL":        paramCpBufferSize,
 	}
 
-	for envname, realname := range nameMap {
-		value := os.Getenv(envname)
+	for envName, realName := range nameMap {
+		value := os.Getenv(envName)
 		if value != "" {
-			settings[realname] = value
+			settings[realName] = value
 		}
 	}
 
@@ -418,22 +486,22 @@ func ParseURLToMap(connString string) (map[string]string, error) {
 func parseURLSettings(connString string) (map[string]string, error) {
 	settings := make(map[string]string)
 
-	url, err := url.Parse(connString)
+	urlParse, err := url.Parse(connString)
 	if err != nil {
 		return nil, err
 	}
 
-	if url.User != nil {
-		settings["user"] = url.User.Username()
-		if password, present := url.User.Password(); present {
-			settings["password"] = password
+	if urlParse.User != nil {
+		settings[paramUser] = urlParse.User.Username()
+		if password, present := urlParse.User.Password(); present {
+			settings[paramPassword] = password
 		}
 	}
 
 	// Handle multiple host:port's in url.Host by splitting them into host,host,host and port,port,port.
 	var hosts []string
 	var ports []string
-	for _, host := range strings.Split(url.Host, ",") {
+	for _, host := range strings.Split(urlParse.Host, ",") {
 		if host == "" {
 			continue
 		}
@@ -449,18 +517,18 @@ func parseURLSettings(connString string) (map[string]string, error) {
 		ports = append(ports, p)
 	}
 	if len(hosts) > 0 {
-		settings["host"] = strings.Join(hosts, ",")
+		settings[paramHost] = strings.Join(hosts, ",")
 	}
 	if len(ports) > 0 {
-		settings["port"] = strings.Join(ports, ",")
+		settings[paramPort] = strings.Join(ports, ",")
 	}
 
-	database := strings.TrimLeft(url.Path, "/")
+	database := strings.TrimLeft(urlParse.Path, "/")
 	if database != "" {
-		settings["database"] = database
+		settings[paramDatabase] = database
 	}
 
-	for k, v := range url.Query() {
+	for k, v := range urlParse.Query() {
 		settings[k] = v[0]
 	}
 
@@ -477,7 +545,7 @@ func parseDSNSettings(s string) (map[string]string, error) {
 	settings := make(map[string]string)
 
 	nameMap := map[string]string{
-		"dbname": "database",
+		"dbname": paramDatabase,
 	}
 
 	for len(s) > 0 {
@@ -545,19 +613,19 @@ func parseDSNSettings(s string) (map[string]string, error) {
 	return settings, nil
 }
 
-func parseServiceSettings(servicefilePath, serviceName string) (map[string]string, error) {
-	servicefile, err := pgservicefile.ReadServicefile(servicefilePath)
+func parseServiceSettings(serviceFilePath, serviceName string) (map[string]string, error) {
+	serviceFile, err := pgservicefile.ReadServiceFile(serviceFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read service file: %v", servicefilePath)
+		return nil, fmt.Errorf("failed to read service file: %v", serviceFilePath)
 	}
 
-	service, err := servicefile.GetService(serviceName)
+	service, err := serviceFile.GetService(serviceName)
 	if err != nil {
 		return nil, fmt.Errorf("unable to find service: %v", serviceName)
 	}
 
 	nameMap := map[string]string{
-		"dbname": "database",
+		"dbname": paramDatabase,
 	}
 
 	settings := make(map[string]string, len(service.Settings))
@@ -573,8 +641,8 @@ func parseServiceSettings(servicefilePath, serviceName string) (map[string]strin
 
 func configGssAPI(settings map[string]string) (map[string]string, error) {
 	gssAPIParams := map[string]string{
-		"krbsrvname": settings["krbsrvname"],
-		"krbspn":     settings["krbspn"],
+		paramKrbSrvName: settings[paramKrbSrvName],
+		paramKrbSpn:     settings[paramKrbSpn],
 	}
 	return gssAPIParams, nil
 }

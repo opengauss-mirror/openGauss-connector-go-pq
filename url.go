@@ -49,17 +49,17 @@ func ParseURL(url string) (string, error) {
 
 	if u.User != nil {
 		v := u.User.Username()
-		accrue("user", v)
+		accrue(paramUser, v)
 
 		v, _ = u.User.Password()
-		accrue("password", v)
+		accrue(paramPassword, v)
 	}
 
 	if host, port, err := net.SplitHostPort(u.Host); err != nil {
-		accrue("host", u.Host)
+		accrue(paramHost, u.Host)
 	} else {
-		accrue("host", host)
-		accrue("port", port)
+		accrue(paramHost, host)
+		accrue(paramPort, port)
 	}
 
 	if u.Path != "" {

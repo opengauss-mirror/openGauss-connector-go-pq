@@ -5,6 +5,7 @@ import (
 	"io"
 	"math"
 	"reflect"
+	"strings"
 	"time"
 
 	"gitee.com/opengauss/openGauss-connector-go-pq/oid"
@@ -69,6 +70,14 @@ func (fd fieldDesc) PrecisionScale() (precision, scale int64, ok bool) {
 	default:
 		return 0, 0, false
 	}
+}
+
+func convertFieldDescString(fields []fieldDesc) string {
+	var list []string
+	for _, l := range fields {
+		list = append(list, l.Name())
+	}
+	return strings.Join(list, "")
 }
 
 type rowsHeader struct {

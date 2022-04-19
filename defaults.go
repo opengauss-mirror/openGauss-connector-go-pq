@@ -11,23 +11,24 @@ import (
 func defaultSettings() map[string]string {
 	settings := make(map[string]string)
 
-	settings["host"] = defaultHost()
-	settings["port"] = "5432"
+	settings[paramHost] = defaultHost()
+	settings[paramPort] = "5432"
 
 	// Default to the OS user name. Purposely ignoring err getting user name from
 	// OS. The client application will simply have to specify the user in that
 	// case (which they typically will be doing anyway).
 	user, err := user.Current()
 	if err == nil {
-		settings["user"] = user.Username
-		settings["passfile"] = filepath.Join(user.HomeDir, ".pgpass")
-		settings["servicefile"] = filepath.Join(user.HomeDir, ".pg_service.conf")
+		settings[paramUser] = user.Username
+		settings[paramPassFile] = filepath.Join(user.HomeDir, ".pgpass")
+		settings[paramServiceFile] = filepath.Join(user.HomeDir, ".pg_service.conf")
 	}
 
-	settings["target_session_attrs"] = "any"
+	settings[paramTargetSessionAttrs] = "any"
 
-	settings["min_read_buffer_size"] = "8192"
-
+	settings[paramMinReadBufferSize] = "8192"
+	settings[paramCpBufferSize] = "65536"
+	// settings["client_encoding"] = "GBK"
 	return settings
 }
 
