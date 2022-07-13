@@ -514,13 +514,13 @@ func (cn *conn) prepareTo(q, stmtName string) *stmt {
 			"stmtName": stmtName,
 		},
 	)
-	b := cn.writeBuf('P')
+	b := cn.writeBuf('P') // Parse (F)
 	b.string(st.name)
 	b.string(q)
 	b.int16(0)
 
-	b.next('D')
-	b.byte('S')
+	b.next('D') // Describe (F)
+	b.byte('S') // 'S' to describe a prepared statement; or 'P' to describe a portal.
 	b.string(st.name)
 
 	b.next('S')
@@ -1442,6 +1442,7 @@ func (cn *conn) readParseResponse() {
 	t, r := cn.recv1()
 	switch t {
 	case '1':
+		// ParseComplete Identifies the message as a Parse-complete indicator.
 		return
 	case 'E':
 		err := parseError(r)
@@ -1457,15 +1458,15 @@ func (cn *conn) readStatementDescribeResponse() (paramTyps []oid.Oid, colNames [
 	for {
 		t, r := cn.recv1()
 		switch t {
-		case 't':
+		case 't': // RowDescription Identifies the message as a row description.
 			nparams := r.int16()
 			paramTyps = make([]oid.Oid, nparams)
 			for i := range paramTyps {
 				paramTyps[i] = r.oid()
 			}
-		case 'n':
+		case 'n': // NoData Identifies the message as a no-data indicator.
 			return paramTyps, nil, nil
-		case 'T':
+		case 'T': // RowDescription Identifies the message as a row description.
 			colNames, colTyps = parseStatementRowDescribe(r)
 			return paramTyps, colNames, colTyps
 		case 'E':

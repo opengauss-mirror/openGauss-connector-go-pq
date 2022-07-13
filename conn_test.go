@@ -1838,8 +1838,6 @@ func Test_Clob_Text_Blob_Bytea(t *testing.T) {
 	defer db.Close()
 	var clientCharset string
 	_ = db.QueryRow("show client_encoding").Scan(&clientCharset)
-	fmt.Println(clientCharset)
-
 	var err error
 	_, _ = db.Exec("drop table Table_Blob_Bytea")
 	if _, err = db.Exec(
@@ -1850,7 +1848,7 @@ func Test_Clob_Text_Blob_Bytea(t *testing.T) {
 		return
 	}
 
-	var ab string = "我是中国人"
+	var ab = "我是中国人"
 	result := make([]byte, hex.EncodedLen(len(ab)))
 	hex.Encode(result, []byte(ab))
 	sqlText := "insert into Table_Blob_Bytea (id,c_blob,c_bytea,c_clob,c_text) values (:1,:2,:3,:4,:5)"
