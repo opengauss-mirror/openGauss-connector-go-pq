@@ -40,16 +40,19 @@ func TestPing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows, err := tx.Query("SELECT pg_backend_pid()")
+	rows, err := tx.Query("SELECT pg_backend_pid(),pg_current_sessid()")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
 
 	// read the pid from result
-	var pid int
+	var (
+		pid       int
+		sessionId int
+	)
 	for rows.Next() {
-		if err := rows.Scan(&pid); err != nil {
+		if err := rows.Scan(&pid, &sessionId); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -68,10 +71,11 @@ func TestPing(t *testing.T) {
 	}
 
 	// kill the process which handles our connection and test if the ping fails
-	if _, err := db.Exec("SELECT pg_terminate_backend($1)", pid); err != nil {
+	if _, err := db.Exec("SELECT pg_terminate_session($1,$2)", pid, sessionId); err != nil {
 		t.Fatal(err)
 	}
-	if err := conn.PingContext(ctx); err != driver.ErrBadConn {
+	var i int64
+	if err := conn.QueryRowContext(ctx, "select 1").Scan(&i); err != driver.ErrBadConn {
 		t.Fatalf("expected error %s, instead got %s", driver.ErrBadConn, err)
 	}
 }

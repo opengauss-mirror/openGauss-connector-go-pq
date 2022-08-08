@@ -150,20 +150,24 @@ func (rs *rows) Next(dest []driver.Value) (err error) {
 		t := conn.recv1Buf(&rs.rb)
 		switch t {
 		case 'E':
+			// ErrorResponse Identifies the message as an error.
 			err = parseError(&rs.rb)
 		case 'C', 'I':
+			// C CommandComplete	Identifies the message as a command-completed response.
+			// I EmptyQueryResponse Identifies the message as a response to an empty query string. (This substitutes for CommandComplete.)
 			if t == 'C' {
 				rs.result, rs.tag = conn.parseComplete(rs.rb.string())
 			}
 			continue
 		case 'Z':
+			// ReadyForQuery Identifies the message type. ReadyForQuery is sent whenever the backend is ready for a new query cycle.
 			conn.processReadyForQuery(&rs.rb)
 			rs.done = true
 			if err != nil {
 				return err
 			}
 			return io.EOF
-		case 'D':
+		case 'D': // DataRow Identifies the message as a data row.
 			n := rs.rb.int16()
 			if err != nil {
 				conn.err.set(driver.ErrBadConn)
@@ -182,6 +186,7 @@ func (rs *rows) Next(dest []driver.Value) (err error) {
 			}
 			return
 		case 'T':
+			// RowDescription Identifies the message as a row description.
 			next := parsePortalRowDescribe(&rs.rb)
 			rs.next = &next
 			return io.EOF

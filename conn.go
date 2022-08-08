@@ -25,8 +25,10 @@ var (
 	ErrNotSupported              = errors.New("pq: Unsupported command")
 	ErrInFailedTransaction       = errors.New("pq: Could not complete operation in a failed transaction")
 	ErrSSLNotSupported           = errors.New("pq: SSL is not enabled on the server")
-	ErrSSLKeyHasWorldPermissions = errors.New("pq: Private key file has group or world access. Permissions should be u=rw (0600) or less")
-	ErrCouldNotDetectUsername    = errors.New("pq: Could not detect default username. Please provide one explicitly")
+	ErrSSLKeyUnknownOwnership    = errors.New("pq: Could not get owner information for private key, may not be properly protected")
+	ErrSSLKeyHasWorldPermissions = errors.New("pq: Private key has world access. Permissions should be u=rw,g=r (0640) if owned by root, or u=rw (0600), or less")
+
+	ErrCouldNotDetectUsername = errors.New("pq: Could not detect default username. Please provide one explicitly")
 
 	errUnexpectedReady = errors.New("unexpected ReadyForQuery")
 	errNoRowsAffected  = errors.New("no RowsAffected available after the empty statement")
@@ -514,13 +516,13 @@ func (cn *conn) prepareTo(q, stmtName string) *stmt {
 			"stmtName": stmtName,
 		},
 	)
-	b := cn.writeBuf('P')
+	b := cn.writeBuf('P') // Parse (F)
 	b.string(st.name)
 	b.string(q)
 	b.int16(0)
 
-	b.next('D')
-	b.byte('S')
+	b.next('D') // Describe (F)
+	b.byte('S') // 'S' to describe a prepared statement; or 'P' to describe a portal.
 	b.string(st.name)
 
 	b.next('S')
@@ -1442,6 +1444,7 @@ func (cn *conn) readParseResponse() {
 	t, r := cn.recv1()
 	switch t {
 	case '1':
+		// ParseComplete Identifies the message as a Parse-complete indicator.
 		return
 	case 'E':
 		err := parseError(r)
@@ -1457,15 +1460,15 @@ func (cn *conn) readStatementDescribeResponse() (paramTyps []oid.Oid, colNames [
 	for {
 		t, r := cn.recv1()
 		switch t {
-		case 't':
+		case 't': // RowDescription Identifies the message as a row description.
 			nparams := r.int16()
 			paramTyps = make([]oid.Oid, nparams)
 			for i := range paramTyps {
 				paramTyps[i] = r.oid()
 			}
-		case 'n':
+		case 'n': // NoData Identifies the message as a no-data indicator.
 			return paramTyps, nil, nil
-		case 'T':
+		case 'T': // RowDescription Identifies the message as a row description.
 			colNames, colTyps = parseStatementRowDescribe(r)
 			return paramTyps, colNames, colTyps
 		case 'E':
