@@ -146,6 +146,7 @@ const (
 	T_fdw_handler                    Oid = 3115
 	T__blob                          Oid = 3201
 	T__clob                          Oid = 3202
+	T_anyset                         Oid = 3272
 	T_pg_user_status                 Oid = 3463
 	T_gs_asp                         Oid = 3465
 	T_pg_resource_pool               Oid = 3466
@@ -200,12 +201,14 @@ const (
 	T__hash16                        Oid = 5803
 	T__hash32                        Oid = 5804
 	T_pg_subscription                Oid = 6128
+	T_pg_subscription_rel            Oid = 6139
 	T_pg_publication                 Oid = 6141
 	T_pg_publication_rel             Oid = 6142
 	T_pg_replication_origin          Oid = 6143
 	T_pg_extension_data_source       Oid = 7177
 	T_smalldatetime                  Oid = 9003
 	T__smalldatetime                 Oid = 9005
+	T_gs_sql_patch                   Oid = 9051
 	T_pg_hashbucket                  Oid = 9108
 	T_gs_package                     Oid = 9745
 )
@@ -354,6 +357,7 @@ var TypeName = map[Oid]string{
 	T_fdw_handler:                    "FDW_HANDLER",
 	T__blob:                          "_BLOB",
 	T__clob:                          "_CLOB",
+	T_anyset:                         "ANYSET",
 	T_pg_user_status:                 "PG_USER_STATUS",
 	T_gs_asp:                         "GS_ASP",
 	T_pg_resource_pool:               "PG_RESOURCE_POOL",
@@ -408,12 +412,14 @@ var TypeName = map[Oid]string{
 	T__hash16:                        "_HASH16",
 	T__hash32:                        "_HASH32",
 	T_pg_subscription:                "PG_SUBSCRIPTION",
+	T_pg_subscription_rel:            "PG_SUBSCRIPTION_REL",
 	T_pg_publication:                 "PG_PUBLICATION",
 	T_pg_publication_rel:             "PG_PUBLICATION_REL",
 	T_pg_replication_origin:          "PG_REPLICATION_ORIGIN",
 	T_pg_extension_data_source:       "PG_EXTENSION_DATA_SOURCE",
 	T_smalldatetime:                  "SMALLDATETIME",
 	T__smalldatetime:                 "_SMALLDATETIME",
+	T_gs_sql_patch:                   "GS_SQL_PATCH",
 	T_pg_hashbucket:                  "PG_HASHBUCKET",
 	T_gs_package:                     "GS_PACKAGE",
 }
