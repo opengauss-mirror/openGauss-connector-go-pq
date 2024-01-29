@@ -178,7 +178,8 @@ func textDecode(parameterStatus *parameterStatus, s []byte, typ oid.Oid) interfa
 	case oid.T_timetz:
 		return mustParse("15:04:05-07", typ, s)
 	case oid.T_bool:
-		return s[0] == 't'
+		// b模式true改成了1
+		return s[0] == 't' || s[0] == '1'
 	case oid.T_int8, oid.T_int4, oid.T_int2:
 		i, err := strconv.ParseInt(string(s), 10, 64)
 		if err != nil {
