@@ -149,11 +149,11 @@ func (c *Connector) connect(ctx context.Context, config *Config) (cn *conn, err 
 	// ConnectTimeout restricts the whole connection process.
 	defer errRecoverNoErrBadConn(&err)
 
-	if config.ConnectTimeout != 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, config.ConnectTimeout)
-		defer cancel()
-	}
+	// if config.ConnectTimeout != 0 {
+	// 	var cancel context.CancelFunc
+	// 	ctx, cancel = context.WithTimeout(ctx, time.Second*2)
+	// 	defer cancel()
+	// }
 	// Simplify usage by treating primary config and fallbacks the same.
 	fallbackConfigs := []*FallbackConfig{
 		{
