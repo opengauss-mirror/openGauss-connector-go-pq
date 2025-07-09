@@ -1,4 +1,4 @@
-module gitee.com/opengauss/openGauss-connector-go-pq/auth/kerberos
+module gitcode.com/opengauss/openGauss-connector-go-pq/auth/kerberos
 
 go 1.13
 

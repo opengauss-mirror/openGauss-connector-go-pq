@@ -2,7 +2,7 @@ package hstore
 
 import (
 	"database/sql"
-	_ "gitee.com/opengauss/openGauss-connector-go-pq"
+	_ "gitcode.com/opengauss/openGauss-connector-go-pq"
 	"os"
 )
 

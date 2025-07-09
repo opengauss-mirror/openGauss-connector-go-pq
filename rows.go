@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"gitee.com/opengauss/openGauss-connector-go-pq/oid"
+	"gitcode.com/opengauss/openGauss-connector-go-pq/oid"
 )
 
 const headerSize = 4

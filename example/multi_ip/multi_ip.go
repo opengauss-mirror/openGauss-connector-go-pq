@@ -5,7 +5,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	_ "gitee.com/opengauss/openGauss-connector-go-pq"
+	_ "gitcode.com/opengauss/openGauss-connector-go-pq"
 	"log"
 	"os"
 	"os/signal"

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log"
 
-	_ "gitee.com/opengauss/openGauss-connector-go-pq"
+	_ "gitcode.com/opengauss/openGauss-connector-go-pq"
 )
 
 func main() {

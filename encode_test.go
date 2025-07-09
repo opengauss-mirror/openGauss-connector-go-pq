@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"gitee.com/opengauss/openGauss-connector-go-pq/oid"
+	"gitcode.com/opengauss/openGauss-connector-go-pq/oid"
 )
 
 func TestScanTimestamp(t *testing.T) {

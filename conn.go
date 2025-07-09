@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/opengauss/openGauss-connector-go-pq/oid"
+	"gitcode.com/opengauss/openGauss-connector-go-pq/oid"
 )
 
 // Common error types
@@ -887,7 +887,7 @@ func (cn *conn) auth(r *readBuf) {
 		}
 	case AuthReqGss: // GSSAPI, startup
 		if newGss == nil {
-			errorf("kerberos error: no GSSAPI provider registered (import gitee.com/opengauss/openGauss-connector-go-pq/auth/kerberos if you need Kerberos support)")
+			errorf("kerberos error: no GSSAPI provider registered (import gitcode.com/opengauss/openGauss-connector-go-pq/auth/kerberos if you need Kerberos support)")
 		}
 		cli, err := newGss()
 		if err != nil {

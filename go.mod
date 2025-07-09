@@ -1,4 +1,4 @@
-module gitee.com/opengauss/openGauss-connector-go-pq
+module gitcode.com/opengauss/openGauss-connector-go-pq
 
 go 1.13
 

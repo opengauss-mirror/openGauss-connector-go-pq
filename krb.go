@@ -10,7 +10,7 @@ var newGss NewGSSFunc
 // you need to use Kerberos to authenticate with your server, add this to your
 // main package:
 //
-//	import "gitee.com/opengauss/openGauss-connector-go-pq/auth/kerberos"
+//	import "gitcode.com/opengauss/openGauss-connector-go-pq/auth/kerberos"
 //
 //	func init() {
 //		pq.RegisterGSSProvider(func() (pq.GSS, error) { return kerberos.NewGSS() })
