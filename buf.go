@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 
-	"gitee.com/opengauss/openGauss-connector-go-pq/oid"
+	"gitcode.com/opengauss/openGauss-connector-go-pq/oid"
 )
 
 type readBuf []byte

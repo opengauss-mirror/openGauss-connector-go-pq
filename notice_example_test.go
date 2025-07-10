@@ -8,7 +8,7 @@ import (
 	"log"
 	"os"
 
-	"gitee.com/opengauss/openGauss-connector-go-pq"
+	"gitcode.com/opengauss/openGauss-connector-go-pq"
 )
 
 func getTestDsn() (string, error) {

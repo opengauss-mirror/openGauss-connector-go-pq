@@ -7,7 +7,7 @@ using this package directly. For example:
 	import (
 		"database/sql"
 
-		_ "gitee.com/opengauss/openGauss-connector-go-pq"
+		_ "gitcode.com/opengauss/openGauss-connector-go-pq"
 	)
 
 	func main() {
@@ -239,7 +239,7 @@ for more information).  Note that the channel name will be truncated to 63
 bytes by the PostgreSQL server.
 
 You can find a complete, working example of Listener usage at
-https://godoc.org/gitee.com/opengauss/openGauss-connector-go-pq/example/listen.
+https://godoc.org/gitcode.com/opengauss/openGauss-connector-go-pq/example/listen.
 
 
 Kerberos Support
@@ -248,7 +248,7 @@ Kerberos Support
 If you need support for Kerberos authentication, add the following to your main
 package:
 
-	import "gitee.com/opengauss/openGauss-connector-go-pq/auth/kerberos"
+	import "gitcode.com/opengauss/openGauss-connector-go-pq/auth/kerberos"
 
 	func init() {
 		pq.RegisterGSSProvider(func() (pq.Gss, error) { return kerberos.NewGSS() })

@@ -12,7 +12,7 @@ import (
 	"os/exec"
 	"strings"
 
-	_ "gitee.com/opengauss/openGauss-connector-go-pq"
+	_ "gitcode.com/opengauss/openGauss-connector-go-pq"
 )
 
 // OID represent a postgres Object Identifier Type.

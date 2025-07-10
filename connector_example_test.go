@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"gitee.com/opengauss/openGauss-connector-go-pq"
+	"gitcode.com/opengauss/openGauss-connector-go-pq"
 )
 
 func ExampleNewConnector() {
