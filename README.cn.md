@@ -5,7 +5,7 @@ fork from [github/lib/pq](https://github.com/lib/pq)
 ## 安装
 
 ```bash
-go get gitee.com/opengauss/openGauss-connector-go-pq
+go get gitcode.com/opengauss/openGauss-connector-go-pq
 ```
 
 ## openGauss版libpq差异
@@ -82,7 +82,7 @@ user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb ss
 import (
  "database/sql"
 
- _ "gitee.com/opengauss/openGauss-connector-go-pq"
+ _ "gitcode.com/opengauss/openGauss-connector-go-pq"
 )
 
 func main() {
