@@ -10,6 +10,7 @@ import (
 )
 
 type QueryResult struct {
+	Index int
 	Rows []map[string]interface{}
 	Err  error                    
 }
@@ -99,7 +100,7 @@ func ExecuteMultiSearch(
 	args [][]interface{},
 	scanParams map[string]interface{},
 	threadCount int,
-) ([][]map[string]interface{}, error) {
+) ([][]map[string]interface{}) {
 	validateQuery(query)
 
 	if args == nil || len(args) == 0 {
@@ -124,19 +125,16 @@ func ExecuteMultiSearch(
 			break
 		}
 
-		chunk := args[start:end]
-		if len(chunk) == 0 {
-			continue
-		}
-
 		wg.Add(1)
-		go func(chunk [][]interface{}) {
+		go func(start, end int) {
 			defer wg.Done()
 			newConn, err := duplicate(conninfo)
 			if err != nil {
-				resultChan <- QueryResult{Err: fmt.Errorf("failed to create connection: %v", err)}
-				return
-			}
+                for j := start; j < end; j++ {
+                    resultChan <- QueryResult{Index: j, Err: fmt.Errorf("failed to create connection: %v", err)}
+                }
+                return
+            }
 			
 			defer newConn.Close()
 			setSQL := buildSetSQL(scanParams)
@@ -144,28 +142,31 @@ func ExecuteMultiSearch(
 			    for _, sql := range setSQL {
 			        _, err = newConn.Exec(sql)
 			        if err != nil {
-			            resultChan <- QueryResult{Err: fmt.Errorf("failed to execute setSQL: %v (sql: %s)", err, sql)}
-			            return
-			        }
+                        for j := start; j < end; j++ {
+                            resultChan <- QueryResult{Index: j, Err: fmt.Errorf("failed to execute setSQL: %v (sql: %s)", err, sql)}
+                        }
+                        return
+                    }
 			    }
 			}
 
-			for _, arg := range chunk {
-				rows, err := newConn.Query(query, arg...)
-				if err != nil {
-					resultChan <- QueryResult{Err: fmt.Errorf("query failed: %v", err)}
-					continue
-				}
+            for j := start; j < end; j++ {
+                arg := args[j]
+                rows, err := newConn.Query(query, arg...)
+                if err != nil {
+                    resultChan <- QueryResult{Index: j, Err: fmt.Errorf("query failed: %v", err)}
+                    continue
+                }
 
-				parsedRows, err := parseRows(rows)
-				rows.Close() 
-				if err != nil {
-					resultChan <- QueryResult{Err: fmt.Errorf("parse failed: %v", err)}
-					return
-				}
-				resultChan <- QueryResult{Rows: parsedRows}
-			}
-		}(chunk)
+                parsedRows, err := parseRows(rows)
+                rows.Close()
+                if err != nil {
+                    resultChan <- QueryResult{Index: j, Err: fmt.Errorf("parse failed: %v", err)}
+                    continue
+                }
+                resultChan <- QueryResult{Index: j, Rows: parsedRows}
+            }
+        }(start, end)
 	}
 
 	go func() {
@@ -173,13 +174,19 @@ func ExecuteMultiSearch(
 		close(resultChan)
 	}()
 
-	var allResults [][]map[string]interface{}
+	var allResults = make([][]map[string]interface{}, len(args))
 	for res := range resultChan {
 		if res.Err != nil {
-			return nil, res.Err
-		}
-		allResults = append(allResults, res.Rows) 
+			errorResult := map[string]interface{}{
+                "error":   true,
+                "message": res.Err.Error(),
+                "index":   res.Index,
+            }
+            allResults[res.Index] = []map[string]interface{}{errorResult}
+        } else {
+            allResults[res.Index] = res.Rows
+        }
 	}
 
-	return allResults, nil
+	return allResults
 }
