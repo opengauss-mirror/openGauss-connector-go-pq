@@ -71,10 +71,10 @@ postgres docs[LIBPQ-MULTIPLE-HOSTS](https://www.postgresql.org/docs/14/libpq-con
   - prefer-standby
 
 ```text
-postgres://gaussdb:secret@foo,bar,baz/mydb?sslmode=disable&target_session_attrs=primary&connect_timeout=1
-postgres://gaussdb:secret@foo:1,bar:2,baz:3/mydb?sslmode=disable&target_session_attrs=primary&connect_timeout=1
-user=gaussdb password=secret host=foo,bar,baz port=5432 dbname=mydb sslmode=disable target_session_attrs=primary connect_timeout=1
-user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb sslmode=disable target_session_attrs=primary connect_timeout=1
+postgres://gaussdb:secret@foo,bar,baz/mydb?sslmode=prefer&target_session_attrs=primary&connect_timeout=1
+postgres://gaussdb:secret@foo:1,bar:2,baz:3/mydb?sslmode=prefer&target_session_attrs=primary&connect_timeout=1
+user=gaussdb password=secret host=foo,bar,baz port=5432 dbname=mydb sslmode=prefer target_session_attrs=primary connect_timeout=1
+user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb sslmode=prefer target_session_attrs=primary connect_timeout=1
 ```
 
 
@@ -88,7 +88,7 @@ _ "gitcode.com/opengauss/openGauss-connector-go-pq"
 )
 
 func main() {
-connStr := "host=127.0.0.1 port=5432 user=gaussdb password=test@1234 dbname=postgres sslmode=disable"
+connStr := "host=127.0.0.1 port=5432 user=gaussdb password=test@1234 dbname=postgres sslmode=prefer"
 db, err := sql.Open("opengauss", connStr)
 if err != nil {
 log.Fatal(err)

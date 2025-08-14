@@ -24,7 +24,7 @@ Run a openGauss container:
 
 ```
 docker run --name openGauss_test \
---privileged=true -d -e GS_PASSWORD=Test@123 \
+--privileged=true -d -e GS_PASSWORD= \
 -p 5432:5432 \
 enmotech/opengauss:latest
 ```
@@ -32,5 +32,5 @@ enmotech/opengauss:latest
 Run tests:
 
 ```
-TEST_CONN_STRING=postgresql://gaussdb:Test@123@localhost:5432/postgres?sslmode=disable go test
+TEST_CONN_STRING=postgresql://gaussdb:Test@123@localhost:5432/postgres?sslmode=prefer go test
 ```
