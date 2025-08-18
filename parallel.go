@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"math"
 	"regexp"
 	"sync"
 	"strings"
@@ -39,7 +40,7 @@ func validateQuery(query string) {
 		log.Fatalf("invalid SQL query: must contain exactly one query, found %d", validCount)
 	}
 
-	vectorOpRegex := regexp.MustCompile(`<->|<=>|<#>|<+>|<~>|<%>`)
+	vectorOpRegex := regexp.MustCompile(`<->|<=>|<#>|<\+>|<~>|<%>`)
 	if !vectorOpRegex.MatchString(trimmedQuery) {
 		log.Fatal("invalid SQL query: must contain vector operator <->, <=>, <+>, <~>, <%> or <#>")
 	}
@@ -112,7 +113,31 @@ func ExecuteMultiSearch(
 	}
 
 	var wg sync.WaitGroup
-	resultChan := make(chan QueryResult, len(args)) 
+	resultChan := make(chan QueryResult, len(args))
+	threadCount = int(math.Min(float64(len(args)), float64(threadCount)))
+
+	var connections []*sql.DB
+	for i := 0; i < threadCount; i++ {
+	    newConn, err := duplicate(conninfo)
+		err = newConn.Ping()
+	    if err != nil {
+			for _, conn := range connections {
+            	if conn != nil {
+					conn.Close()
+				}
+			}
+	    	allResults := make([][]map[string]interface{}, 1)
+	    	allResults[0] = []map[string]interface{}{
+	    	    {
+	    	        "error":   true,
+	    	        "message": fmt.Sprintf("failed to create connection: %v", err),
+	    	        "index":   0,
+	    	    },
+	    	}
+	    	return allResults
+		}
+	    connections = append(connections, newConn)
+	}
 
 	chunkSize := (len(args) + threadCount - 1) / threadCount
 	for i := 0; i < threadCount; i++ {
@@ -126,21 +151,15 @@ func ExecuteMultiSearch(
 		}
 
 		wg.Add(1)
-		go func(start, end int) {
+		conn := connections[i]
+		go func(start, end int, conn *sql.DB) {
 			defer wg.Done()
-			newConn, err := duplicate(conninfo)
-			if err != nil {
-                for j := start; j < end; j++ {
-                    resultChan <- QueryResult{Index: j, Err: fmt.Errorf("failed to create connection: %v", err)}
-                }
-                return
-            }
-			
-			defer newConn.Close()
+			defer conn.Close()
+
 			setSQL := buildSetSQL(scanParams)
 			if setSQL != nil {
 			    for _, sql := range setSQL {
-			        _, err = newConn.Exec(sql)
+			        _, err := conn.Exec(sql)
 			        if err != nil {
                         for j := start; j < end; j++ {
                             resultChan <- QueryResult{Index: j, Err: fmt.Errorf("failed to execute setSQL: %v (sql: %s)", err, sql)}
@@ -148,11 +167,12 @@ func ExecuteMultiSearch(
                         return
                     }
 			    }
+
 			}
 
             for j := start; j < end; j++ {
                 arg := args[j]
-                rows, err := newConn.Query(query, arg...)
+                rows, err := conn.Query(query, arg...)
                 if err != nil {
                     resultChan <- QueryResult{Index: j, Err: fmt.Errorf("query failed: %v", err)}
                     continue
@@ -166,14 +186,14 @@ func ExecuteMultiSearch(
                 }
                 resultChan <- QueryResult{Index: j, Rows: parsedRows}
             }
-        }(start, end)
+        }(start, end, conn)
 	}
 
 	go func() {
 		wg.Wait()
 		close(resultChan)
 	}()
-
+	
 	var allResults = make([][]map[string]interface{}, len(args))
 	for res := range resultChan {
 		if res.Err != nil {
