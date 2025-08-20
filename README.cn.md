@@ -70,10 +70,10 @@ postgres 介绍文档[LIBPQ-MULTIPLE-HOSTS](https://www.postgresql.org/docs/14/l
   - prefer-standby
 
 ```text
-postgres://gaussdb:secret@foo,bar,baz/mydb?sslmode=disable&target_session_attrs=primary&connect_timeout=1
-postgres://gaussdb:secret@foo:1,bar:2,baz:3/mydb?sslmode=disable&target_session_attrs=primary&connect_timeout=1
-user=gaussdb password=secret host=foo,bar,baz port=5432 dbname=mydb sslmode=disable target_session_attrs=primary connect_timeout=1
-user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb sslmode=disable target_session_attrs=primary connect_timeout=1
+postgres://gaussdb:secret@foo,bar,baz/mydb?sslmode=prefer&target_session_attrs=primary&connect_timeout=1
+postgres://gaussdb:secret@foo:1,bar:2,baz:3/mydb?sslmode=prefer&target_session_attrs=primary&connect_timeout=1
+user=gaussdb password=secret host=foo,bar,baz port=5432 dbname=mydb sslmode=prefer target_session_attrs=primary connect_timeout=1
+user=gaussdb password=secret host=foo,bar,baz port=5432,5432,5433 dbname=mydb sslmode=prefer target_session_attrs=primary connect_timeout=1
 ```
 
 ## 示例
@@ -86,7 +86,7 @@ import (
 )
 
 func main() {
- connStr := "host=127.0.0.1 port=5432 user=gaussdb password=test@1234 dbname=postgres sslmode=disable"
+ connStr := "host=127.0.0.1 port=5432 user=gaussdb password=****** dbname=postgres sslmode=prefer"
  db, err := sql.Open("opengauss", connStr)
  if err != nil {
   log.Fatal(err)
@@ -99,6 +99,7 @@ func main() {
  fmt.Println(date)
 }
 ```
+注意：该仓库中所有资料和测试文件（copy_test.go, encode_test.go等）使用的密码及sslmode=disable仅为示例，在使用时，请根据实际情况配置正确的密码、使用安全的sslmode（默认值prefer）。
 
 ## 测试
 

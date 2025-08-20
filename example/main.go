@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	connStr := "host=127.0.0.1 port=5433 user=gaussdb password=mtkOP@128 dbname=postgres sslmode=disable"
+	connStr := "host=127.0.0.1 port=5433 user=gaussdb password=mtkOP@128 dbname=postgres sslmode=prefer"
 	db, err := sql.Open("opengauss", connStr)
 	if err != nil {
 		log.Fatal(err)

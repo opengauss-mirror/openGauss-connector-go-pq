@@ -58,7 +58,7 @@ func checkSSLSetup(t *testing.T, conninfo string) {
 func TestSSLConnection(t *testing.T) {
 	maybeSkipSSLTests(t)
 	// Environment sanity check: should fail without SSL
-	checkSSLSetup(t, "sslmode=disable user=pqgossltest")
+	checkSSLSetup(t, "sslmode=prefer user=pqgossltest")
 
 	db, err := openSSLConn(t, "sslmode=require user=pqgossltest")
 	if err != nil {
@@ -75,7 +75,7 @@ func TestSSLConnection(t *testing.T) {
 func TestSSLVerifyFull(t *testing.T) {
 	maybeSkipSSLTests(t)
 	// Environment sanity check: should fail without SSL
-	checkSSLSetup(t, "sslmode=disable user=pqgossltest")
+	checkSSLSetup(t, "sslmode=prefer user=pqgossltest")
 
 	// Not OK according to the system CA
 	_, err := openSSLConn(t, "host=postgres sslmode=verify-full user=pqgossltest")
@@ -112,7 +112,7 @@ func TestSSLVerifyFull(t *testing.T) {
 func TestSSLRequireWithRootCert(t *testing.T) {
 	maybeSkipSSLTests(t)
 	// Environment sanity check: should fail without SSL
-	checkSSLSetup(t, "sslmode=disable user=pqgossltest")
+	checkSSLSetup(t, "sslmode=prefer user=pqgossltest")
 
 	bogusRootCertPath := filepath.Join(os.Getenv("PQSSLCERTTEST_PATH"), "bogus_root.crt")
 	bogusRootCert := "sslrootcert=" + bogusRootCertPath + " "
@@ -155,7 +155,7 @@ func TestSSLRequireWithRootCert(t *testing.T) {
 func TestSSLVerifyCA(t *testing.T) {
 	maybeSkipSSLTests(t)
 	// Environment sanity check: should fail without SSL
-	checkSSLSetup(t, "sslmode=disable user=pqgossltest")
+	checkSSLSetup(t, "sslmode=prefer user=pqgossltest")
 
 	// Not OK according to the system CA
 	{
@@ -189,7 +189,7 @@ func TestSSLVerifyCA(t *testing.T) {
 func TestSSLClientCertificates(t *testing.T) {
 	maybeSkipSSLTests(t)
 	// Environment sanity check: should fail without SSL
-	checkSSLSetup(t, "sslmode=disable user=pqgossltest")
+	checkSSLSetup(t, "sslmode=prefer user=pqgossltest")
 
 	const baseinfo = "sslmode=require user=pqgosslcert"
 
